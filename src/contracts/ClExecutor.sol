@@ -1,17 +1,10 @@
-//SPDX-License-Identifier: MIT
+//SPDX-License-Identifier: MITISwapRouter
 
-pragma solidity >=0.8.0;
+pragma solidity >=0.7.5;
 
-import "../interfaces/IRamsesV2Pool.sol";
-import "../interfaces/ISwapRouter.sol";
-import "../interfaces/INonfungiblePositionManager.sol";
-import "../interfaces/ERCStandards/IERC20MintableBurnable.sol";
 import "./interfaces/ICLExecutor.sol";
-import "./PositionTokens/Mid.sol";
-import "./PositionTokens/Narrow.sol";
-import "./PositionTokens/Wide.sol";
 
-contract CLExecutor {
+contract ClExecutor is ICLExecutor {
     /* Temporary */
     address constant NFT_MANAGER_ADDRESS =
         0xAA277CB7914b7e5514946Da92cb9De332Ce610EF;
@@ -20,8 +13,11 @@ contract CLExecutor {
     IERC20MintableBurnable immutable narrowToken;
     IERC20MintableBurnable immutable midToken;
     IERC20MintableBurnable immutable wideToken;
-    INonfungiblePositionManager nonfungiblePositionManager =
-        INonfungiblePositionManager(NFT_MANAGER_ADDRESS);
+    // INonfungiblePositionManager nonfungiblePositionManager =
+    //     INonfungiblePositionManager(NFT_MANAGER_ADDRESS);
+
+    IRamsesV2Factory ramsesV2Factory =
+        IRamsesV2Factory(0xAA2cd7477c451E703f3B9Ba5663334914763edF8);
 
     mapping(address => uint256[]) userToNftIds;
 
@@ -29,7 +25,7 @@ contract CLExecutor {
         address routerAddress,
         address narrowAddress,
         address midAddress,
-        address wideAddress,
+        address wideAddress
     ) {
         swapRouter = ISwapRouter(routerAddress);
         narrowToken = IERC20MintableBurnable(narrowAddress);
@@ -47,55 +43,53 @@ contract CLExecutor {
         address tokenB,
         uint256 amountA,
         uint256 amountB,
-        uint256 fee,
+        uint24 fee,
         ranges priceRange
     ) public returns (uint256) {
         uint160 sqrtPriceX96;
-        IRamsesV2Pool currentPool = swapRouter.getPool(
-            tokenA,
-            tokenB,
-            fee
+        IRamsesV2Pool currentPool = IRamsesV2Pool(
+            ramsesV2Factory.getPool(tokenA, tokenB, fee)
         ); /* The fee shall be also adjusted */
         int24 tickLower = 0;
         int24 tickUpper = 0;
         uint256 amount = amountA; /* to be determmined */
-        require(priceRange < MAX, "Price range not allowed");
+        require(priceRange < ranges.MAX, "Price range not allowed");
 
         (sqrtPriceX96, , , , , , ) = currentPool.slot0();
 
         if (ranges.NARROW == priceRange) {
             /* Range between +/- 2% range */
-            tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 2) / 100);
-            tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 2) / 100);
+            // tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 2) / 100);
+            // tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 2) / 100);
             narrowToken.mint(amount);
             narrowToken.transfer(msg.sender, amount);
         } else if (ranges.MID == priceRange) {
             /* Range between +/- 5% range */
-            tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 5) / 100);
-            tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 5) / 100);
+            // tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 5) / 100);
+            // tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 5) / 100);
             midToken.mint(amount);
             midToken.transfer(msg.sender, amount);
         } else {
             /* WIDE */
             /* Range between +/- 10% range */
-            tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 10) / 100);
-            tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 10) / 100);
+            // tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 10) / 100);
+            // tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 10) / 100);
             wideToken.mint(amount);
             wideToken.transfer(msg.sender, amount);
         }
 
-        MintParams params = MintParams(
-            tokenA,
-            tokenB,
-            fee,
-            amountA,
-            amountB,
-            tickLower,
-            tickUpper
-        );
-        userToNftIds[msg.sender][priceRange] = nonfungiblePositionManager.mint(
-            params
-        ); /* state updated after interaction */
+        // MintParams params = MintParams(
+        //     tokenA,
+        //     tokenB,
+        //     fee,
+        //     amountA,
+        //     amountB,
+        //     tickLower,
+        //     tickUpper
+        // );
+        // userToNftIds[msg.sender][priceRange] = nonfungiblePositionManager.mint(
+        //     params
+        // ); /* state updated after interaction */
     }
 
     /**
@@ -108,14 +102,15 @@ contract CLExecutor {
         address tokenOut,
         uint256 amountMin
     ) public returns (uint256) {
-        bytes path = abi.encode(tokenIn, tokenOut);
-        ExactOutputParams params = ExactOutputParams(
-            path,
-            msg.sender,
-            (block.timestamp + 10),
-            amountMin,
-            IERC20(tokenIn).balanceOf(msg.sender) // amountInMax
-        );
+        bytes memory path = abi.encode(tokenIn, tokenOut);
+        ISwapRouter.ExactOutputParams memory params = ISwapRouter
+            .ExactOutputParams(
+                path,
+                msg.sender,
+                (block.timestamp + 10),
+                amountMin,
+                IERC20(tokenIn).balanceOf(msg.sender) // amountInMax
+            );
         swapRouter.exactOutput(params);
     }
 
@@ -124,7 +119,7 @@ contract CLExecutor {
     */
     function compoundPosition(ranges priceRange) public returns (uint256) {
         _collectRewards(priceRange);
-        provideLiquidity(); /* to be filled */
+        //provideLiquidity(); /* to be filled */
         _boostRewards(priceRange);
     }
 
@@ -132,13 +127,13 @@ contract CLExecutor {
     function _boostRewards(ranges priceRange) private returns (uint256) {}
 
     function _collectRewards(ranges priceRange) private returns (uint256) {
-        bytes params = CollectParams(
-            userToNftIds[msg.sender][priceRange],
-            address(this),
-            0 /* ?? */,
-            0 /* ?? */
-        );
-        nonfungiblePositionManager.collect(params);
+        // bytes params = CollectParams(
+        //     userToNftIds[msg.sender][priceRange],
+        //     address(this),
+        //     0 /* ?? */,
+        //     0 /* ?? */
+        // );
+        // nonfungiblePositionManager.collect(params);
     }
 
     /** Public getters **/
