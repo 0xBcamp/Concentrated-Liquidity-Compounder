@@ -5,28 +5,36 @@ pragma solidity >=0.8.0;
 import "../interfaces/IRamsesV2Pool.sol";
 import "../interfaces/ISwapRouter.sol";
 import "../interfaces/INonfungiblePositionManager.sol";
-import "@openzeppelin/contracts/token/ERC1155/ERC1155.sol";
+import "../interfaces/ERCStandards/IERC20MintableBurnable.sol";
+import "./interfaces/ICLExecutor.sol";
+import "./PositionTokens/Mid.sol";
+import "./PositionTokens/Narrow.sol";
+import "./PositionTokens/Wide.sol";
 
-enum ranges {
-    NARROW,
-    MID,
-    WIDE_RANGE,
-    MAX
-}
-
-contract CL_Compounder is ERC1155 {
+contract CLExecutor {
     /* Temporary */
     address constant NFT_MANAGER_ADDRESS =
         0xAA277CB7914b7e5514946Da92cb9De332Ce610EF;
 
     ISwapRouter immutable swapRouter;
+    IERC20MintableBurnable immutable narrowToken;
+    IERC20MintableBurnable immutable midToken;
+    IERC20MintableBurnable immutable wideToken;
     INonfungiblePositionManager nonfungiblePositionManager =
         INonfungiblePositionManager(NFT_MANAGER_ADDRESS);
 
     mapping(address => uint256[]) userToNftIds;
 
-    constructor(address routerAddress) ERC1155("") {
+    constructor(
+        address routerAddress,
+        address narrowAddress,
+        address midAddress,
+        address wideAddress,
+    ) {
         swapRouter = ISwapRouter(routerAddress);
+        narrowToken = IERC20MintableBurnable(narrowAddress);
+        midToken = IERC20MintableBurnable(midAddress);
+        wideToken = IERC20MintableBurnable(wideAddress);
     }
 
     /** Public setters **/
@@ -50,7 +58,7 @@ contract CL_Compounder is ERC1155 {
         ); /* The fee shall be also adjusted */
         int24 tickLower = 0;
         int24 tickUpper = 0;
-
+        uint256 amount = amountA; /* to be determmined */
         require(priceRange < MAX, "Price range not allowed");
 
         (sqrtPriceX96, , , , , , ) = currentPool.slot0();
@@ -59,18 +67,21 @@ contract CL_Compounder is ERC1155 {
             /* Range between +/- 2% range */
             tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 2) / 100);
             tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 2) / 100);
-            _mint(msg.sender, NARROW, amountA /* to be determmined */, "");
+            narrowToken.mint(amount);
+            narrowToken.transfer(msg.sender, amount);
         } else if (ranges.MID == priceRange) {
             /* Range between +/- 5% range */
             tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 5) / 100);
             tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 5) / 100);
-            _mint(msg.sender, MID, amountA /* to be determmined */, "");
+            midToken.mint(amount);
+            midToken.transfer(msg.sender, amount);
         } else {
             /* WIDE */
             /* Range between +/- 10% range */
             tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 10) / 100);
             tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 10) / 100);
-            _mint(msg.sender, WIDE, amountA /* to be determmined */, "");
+            wideToken.mint(amount);
+            wideToken.transfer(msg.sender, amount);
         }
 
         MintParams params = MintParams(
@@ -128,48 +139,6 @@ contract CL_Compounder is ERC1155 {
             0 /* ?? */
         );
         nonfungiblePositionManager.collect(params);
-    }
-
-    /**
-     * @dev See {IERC1155-safeTransferFrom}.
-     */
-    function safeTransferFrom(
-        address from,
-        address to,
-        uint256 id,
-        uint256 amount,
-        bytes memory data
-    ) public virtual override {
-        require(
-            from == _msgSender() || isApprovedForAll(from, _msgSender()),
-            "ERC1155: caller is not token owner or approved"
-        );
-        userToNftIds[to] = userToNftIds[from];
-        userToNftIds[from] = 0;
-        _safeTransferFrom(from, to, id, amount, data);
-    }
-
-    /**
-     * @dev See {IERC1155-safeBatchTransferFrom}.
-     */
-    function safeBatchTransferFrom(
-        address from,
-        address to,
-        uint256[] memory ids,
-        uint256[] memory amounts,
-        bytes memory data
-    ) public virtual override {
-        require(
-            from == _msgSender() || isApprovedForAll(from, _msgSender()),
-            "ERC1155: caller is not token owner or approved"
-        );
-        require(ids < ranges.MAX);
-        for (uint8 idx; idx < ids.length; idx) {
-            userToNftIds[to][idx] = userToNftIds[from][idx];
-            userToNftIds[from][idx] = 0;
-        }
-
-        _safeBatchTransferFrom(from, to, ids, amounts, data);
     }
 
     /** Public getters **/
