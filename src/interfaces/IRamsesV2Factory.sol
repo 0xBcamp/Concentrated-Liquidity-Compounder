@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity >=0.5.0;
+pragma solidity ^0.8.0;
 
 /// @title The interface for the Ramses V2 Factory
 /// @notice The Ramses V2 Factory facilitates creation of Ramses V2 pools and control over the protocol fees

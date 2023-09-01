@@ -13,8 +13,8 @@ contract ClExecutor is ICLExecutor {
     IERC20MintableBurnable immutable narrowToken;
     IERC20MintableBurnable immutable midToken;
     IERC20MintableBurnable immutable wideToken;
-    // INonfungiblePositionManager nonfungiblePositionManager =
-    //     INonfungiblePositionManager(NFT_MANAGER_ADDRESS);
+    INonfungiblePositionManager nonfungiblePositionManager =
+        INonfungiblePositionManager(NFT_MANAGER_ADDRESS);
 
     IRamsesV2Factory ramsesV2Factory =
         IRamsesV2Factory(0xAA2cd7477c451E703f3B9Ba5663334914763edF8);
@@ -77,19 +77,28 @@ contract ClExecutor is ICLExecutor {
             wideToken.mint(amount);
             wideToken.transfer(msg.sender, amount);
         }
+        INonfungiblePositionManager.MintParams
+            memory params = INonfungiblePositionManager.MintParams(
+                tokenA,
+                tokenB,
+                fee,
+                tickLower,
+                tickUpper,
+                amountA,
+                amountB,
+                0,
+                0,
+                address(this),
+                (block.timestamp + 10)
+            );
+        (
+            userToNftIds[msg.sender][uint256(priceRange)],
+            ,
+            ,
 
-        // MintParams params = MintParams(
-        //     tokenA,
-        //     tokenB,
-        //     fee,
-        //     amountA,
-        //     amountB,
-        //     tickLower,
-        //     tickUpper
-        // );
-        // userToNftIds[msg.sender][priceRange] = nonfungiblePositionManager.mint(
-        //     params
-        // ); /* state updated after interaction */
+        ) = nonfungiblePositionManager.mint(
+            params
+        ); /* state updated after interaction */
     }
 
     /**

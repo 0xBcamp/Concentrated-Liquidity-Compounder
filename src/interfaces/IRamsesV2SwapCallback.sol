@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
-pragma solidity >=0.5.0;
+pragma solidity ^0.8.0;
 
 /// @title Callback for IRamsesV2PoolActions#swap
 /// @notice Any contract that calls IRamsesV2PoolActions#swap must implement this interface
