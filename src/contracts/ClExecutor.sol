@@ -2,6 +2,7 @@
 
 pragma solidity >=0.7.5;
 
+import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "./interfaces/ICLExecutor.sol";
 
 contract ClExecutor is ICLExecutor {
@@ -109,18 +110,31 @@ contract ClExecutor is ICLExecutor {
     function swapTokens(
         address tokenIn,
         address tokenOut,
-        uint256 amountMin
+        uint256 amountIn
     ) public returns (uint256) {
-        bytes memory path = abi.encode(tokenIn, tokenOut);
-        ISwapRouter.ExactOutputParams memory params = ISwapRouter
-            .ExactOutputParams(
-                path,
-                msg.sender,
-                (block.timestamp + 10),
-                amountMin,
-                IERC20(tokenIn).balanceOf(msg.sender) // amountInMax
-            );
-        swapRouter.exactOutput(params);
+        TransferHelper.safeTransferFrom(
+            tokenIn,
+            msg.sender,
+            address(this),
+            amountIn
+        );
+        TransferHelper.safeApprove(tokenIn, address(swapRouter), amountIn);
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                // pool fee 0.3%
+                fee: 3000,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                // NOTE: In production, this value can be used to set the limit
+                // for the price the swap will push the pool to,
+                // which can help protect against price impact
+                sqrtPriceLimitX96: 0
+            });
+        amountOut = swapRouter.exactInputSingle(params);
     }
 
     /**
@@ -135,14 +149,23 @@ contract ClExecutor is ICLExecutor {
     /** Private setters **/
     function _boostRewards(ranges priceRange) private returns (uint256) {}
 
-    function _collectRewards(ranges priceRange) private returns (uint256) {
-        // bytes params = CollectParams(
-        //     userToNftIds[msg.sender][priceRange],
-        //     address(this),
-        //     0 /* ?? */,
-        //     0 /* ?? */
-        // );
-        // nonfungiblePositionManager.collect(params);
+    function _collectRewards(
+        ranges priceRange
+    ) private returns (uint256 amount0, uint256 amount1) {
+        // set amount0Max and amount1Max to uint256.max to collect all fees
+        // alternatively can set recipient to msg.sender and avoid another transaction in `sendToOwner`
+        INonfungiblePositionManager.CollectParams
+            memory params = INonfungiblePositionManager.CollectParams({
+                tokenId: userToNftIds[msg.sender][uint256(priceRange)],
+                recipient: address(this),
+                amount0Max: type(uint128).max,
+                amount1Max: type(uint128).max
+            });
+
+        (amount0, amount1) = nonfungiblePositionManager.collect(params);
+
+        // console.log("fee 0", amount0);
+        // console.log("fee 1", amount1);
     }
 
     /** Public getters **/
