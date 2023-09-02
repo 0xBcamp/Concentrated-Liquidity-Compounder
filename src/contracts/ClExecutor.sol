@@ -51,8 +51,8 @@ contract ClExecutor is ICLExecutor {
         IRamsesV2Pool currentPool = IRamsesV2Pool(
             ramsesV2Factory.getPool(tokenA, tokenB, fee)
         ); /* The fee shall be also adjusted */
-        int24 tickLower = 0;
-        int24 tickUpper = 0;
+        int24 tickLower = TickMath.MIN_TICK;
+        int24 tickUpper = TickMath.MAX_TICK;
         uint256 amount = amountA; /* to be determmined */
         require(priceRange < ranges.MAX, "Price range not allowed");
 
@@ -112,6 +112,7 @@ contract ClExecutor is ICLExecutor {
         address tokenOut,
         uint256 amountIn
     ) public returns (uint256) {
+        uint256 amountOut = 0;
         TransferHelper.safeTransferFrom(
             tokenIn,
             msg.sender,
@@ -135,6 +136,7 @@ contract ClExecutor is ICLExecutor {
                 sqrtPriceLimitX96: 0
             });
         amountOut = swapRouter.exactInputSingle(params);
+        return amountOut;
     }
 
     /**
