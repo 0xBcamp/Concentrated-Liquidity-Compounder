@@ -10,6 +10,13 @@ import "../../interfaces/ERCStandards/IERC20MintableBurnable.sol";
 import "../../libraries/TickMath.sol";
 
 interface ICLExecutor {
+    struct Deposit {
+        address owner;
+        uint128 liquidity;
+        address token0;
+        address token1;
+    }
+
     enum ranges {
         NARROW,
         MID,
