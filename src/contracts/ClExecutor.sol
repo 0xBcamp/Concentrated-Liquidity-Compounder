@@ -111,6 +111,7 @@ contract ClExecutor is ICLExecutor {
         IRamsesV2Pool currentPool = IRamsesV2Pool(
             ramsesV2Factory.getPool(tokenA, tokenB, fee)
         ); /* The fee shall be also adjusted */
+        _collectRewards(tokenId);
         currentPool.burn(tickLower, tickUpper, liquidity);
         nonfungiblePositionManager.burn(tokenId);
     }
