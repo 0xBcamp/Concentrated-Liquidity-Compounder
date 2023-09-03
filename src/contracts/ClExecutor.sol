@@ -58,7 +58,7 @@ contract ClExecutor is ICLExecutor {
         uint256 amountB,
         uint24 fee,
         ranges priceRange
-    ) public returns (uint256) {
+    ) external returns (uint256) {
         uint256 tokenId = 0;
         uint8 percentage = 0;
         IERC20MintableBurnable token = wideToken;
@@ -92,13 +92,34 @@ contract ClExecutor is ICLExecutor {
     /**
     @dev Unstake and remove liquidity from ramses
     */
-    function removeLiquidity(address positionToken) public returns (uint256) {}
+    function removeLiquidity(uint256 tokenId) external {
+        (
+            ,
+            ,
+            address tokenA,
+            address tokenB,
+            uint24 fee,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            ,
+            ,
+            ,
+
+        ) = nonfungiblePositionManager.positions(tokenId);
+
+        IRamsesV2Pool currentPool = IRamsesV2Pool(
+            ramsesV2Factory.getPool(tokenA, tokenB, fee)
+        ); /* The fee shall be also adjusted */
+        currentPool.burn(tickLower, tickUpper, liquidity);
+        nonfungiblePositionManager.burn(tokenId);
+    }
 
     function swapTokens(
         address tokenIn,
         address tokenOut,
         uint256 amountIn
-    ) public returns (uint256) {
+    ) external returns (uint256) {
         uint256 amountOut = 0;
         TransferHelper.safeTransferFrom(
             tokenIn,
@@ -129,10 +150,10 @@ contract ClExecutor is ICLExecutor {
     /**
     @dev Collect gathered fees, collect gathered RAM token, provide collected fees into the pool, boost rewards with RAM token
     */
-    function compoundPosition(ranges priceRange) public returns (uint256) {
-        _collectRewards(priceRange);
+    function compoundPosition(uint256 tokenId) public returns (uint256) {
+        _collectRewards(tokenId);
         //provideLiquidity(); /* to be filled */
-        _boostRewards(priceRange);
+        _boostRewards(tokenId);
     }
 
     /** Private setters **/
@@ -174,22 +195,25 @@ contract ClExecutor is ICLExecutor {
         IERC20MintableBurnable token
     ) private returns (uint256) {
         uint160 sqrtPriceX96;
-        IRamsesV2Pool currentPool = IRamsesV2Pool(
-            ramsesV2Factory.getPool(tokenA, tokenB, fee)
-        ); /* The fee shall be also adjusted */
         int24 tickLower = TickMath.MIN_TICK;
         int24 tickUpper = TickMath.MAX_TICK;
-        int24 tick = 0;
-        uint256 amountOfLiquidity = 0;
         uint256 tokenId = 0;
+        /* Logical blocks - limits stack usage */
+        {
+            IRamsesV2Pool currentPool = IRamsesV2Pool(
+                ramsesV2Factory.getPool(tokenA, tokenB, fee)
+            ); /* The fee shall be also adjusted */
+            (sqrtPriceX96, , , , , , ) = currentPool.slot0();
+            console.log("Price: %d", sqrtPriceX96);
+        }
+        /* Logical blocks - limits stack usage */
+        {
+            int24 tick = 0;
+            tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
 
-        (sqrtPriceX96, , , , , , ) = currentPool.slot0();
-        console.log("Price: %d", sqrtPriceX96);
-        tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-
-        tickLower = tick - ((tick * int24(uint24(percentage))) / 100);
-        tickUpper = tick + ((tick * int24(uint24(percentage))) / 100);
-
+            tickLower = tick - ((tick * int24(uint24(percentage))) / 100);
+            tickUpper = tick + ((tick * int24(uint24(percentage))) / 100);
+        }
         INonfungiblePositionManager.MintParams
             memory params = INonfungiblePositionManager.MintParams(
                 tokenA,
@@ -204,23 +228,29 @@ contract ClExecutor is ICLExecutor {
                 address(this),
                 (block.timestamp + 10)
             );
-        (
-            tokenId,
-            amountOfLiquidity,
-            /* amount0 */
-            /* amount1 */
-            ,
 
-        ) = nonfungiblePositionManager.mint(
-                params
-            ); /* state updated after interaction */
-        _createDeposit(msg.sender, tokenId);
-        token.mint(amountOfLiquidity);
-        token.transfer(msg.sender, amountOfLiquidity);
+        /* Logical blocks - limits stack usage */
+        {
+            uint256 amountOfLiquidity = 0;
+            (
+                tokenId,
+                amountOfLiquidity,
+                /* amount0 */
+                /* amount1 */
+                ,
+
+            ) = nonfungiblePositionManager.mint(
+                    params
+                ); /* state updated after interaction */
+            _createDeposit(msg.sender, tokenId);
+            token.mint(amountOfLiquidity);
+            token.transfer(msg.sender, amountOfLiquidity);
+        }
+
         return tokenId;
     }
 
-    function _boostRewards(ranges priceRange) private returns (uint256) {}
+    function _boostRewards(uint256 tokenId) private returns (uint256) {}
 
     function _collectRewards(
         uint256 tokenId
