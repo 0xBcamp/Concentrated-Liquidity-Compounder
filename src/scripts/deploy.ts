@@ -16,7 +16,10 @@ async function main() {
   const midContract = await deployContract<Mid>("Mid");
   const wideContract = await deployContract<Wide>("Wide");
 
-  await deployContract<ClExecutor>("ClExecutor", SWAP_ROUTER_ADDRESS, narrowContract.target, midContract.target, wideContract.target);
+  const clExecutorContract = await deployContract<ClExecutor>("ClExecutor", SWAP_ROUTER_ADDRESS, narrowContract.target, midContract.target, wideContract.target);
+  narrowContract.setExecutor(clExecutorContract.target);
+  midContract.setExecutor(clExecutorContract.target);
+  wideContract.setExecutor(clExecutorContract.target);
 
   await deployContract<Vault>("Vault", midContract.target);
 }

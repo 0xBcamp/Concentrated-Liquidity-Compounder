@@ -25,6 +25,10 @@ contract Wide is ERC20 {
         _;
     }
 
+    function setExecutor(address _clExecutorAddress) public onlyOwner {
+        clExecutorAddress = _clExecutorAddress;
+    }
+
     function burn(uint256 amount) public onlyExecutor {
         _burn(_msgSender(), amount);
     }

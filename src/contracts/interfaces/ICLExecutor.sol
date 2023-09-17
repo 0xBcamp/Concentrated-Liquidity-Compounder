@@ -7,6 +7,7 @@ import "../../interfaces/ISwapRouter.sol";
 import "../../interfaces/IRamsesV2Factory.sol";
 import "../../interfaces/INonfungiblePositionManager.sol";
 import "../../interfaces/ERCStandards/IERC20MintableBurnable.sol";
+import "../../interfaces/ERCStandards/IWeth.sol";
 import "../../libraries/TickMath.sol";
 
 interface ICLExecutor {

@@ -48,6 +48,19 @@ contract ClExecutor is ICLExecutor {
 
     /** Public setters **/
 
+    /** Function to get WETH from ETH
+     * @param wethAddress - address of WETH contract (0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 for mainnet)
+     */
+    function getWethFromEth(
+        address wethAddress
+    ) external payable returns (uint256) {
+        IWeth wEth = IWeth(wethAddress);
+        wEth.deposit{value: msg.value}();
+        //wEth.approve(msg.sender, wEth.balanceOf(address(this)));
+        wEth.transfer(msg.sender, wEth.balanceOf(address(this)));
+        return wEth.balanceOf(msg.sender);
+    }
+
     /**
     @dev Add liquidity to ramses and stake
     */
@@ -128,13 +141,15 @@ contract ClExecutor is ICLExecutor {
             address(this),
             amountIn
         );
+
         TransferHelper.safeApprove(tokenIn, address(swapRouter), amountIn);
+
         ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
             .ExactInputSingleParams({
                 tokenIn: tokenIn,
                 tokenOut: tokenOut,
-                // pool fee 0.3%
-                fee: 3000,
+                // pool fee 0.05%
+                fee: 500,
                 recipient: msg.sender,
                 deadline: block.timestamp,
                 amountIn: amountIn,
@@ -205,16 +220,65 @@ contract ClExecutor is ICLExecutor {
                 ramsesV2Factory.getPool(tokenA, tokenB, fee)
             ); /* The fee shall be also adjusted */
             (sqrtPriceX96, , , , , , ) = currentPool.slot0();
-            console.log("Price: %d", sqrtPriceX96);
+            //console.log("Price: %d", sqrtPriceX96);
         }
         /* Logical blocks - limits stack usage */
         {
             int24 tick = 0;
             tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
-
-            tickLower = tick - ((tick * int24(uint24(percentage))) / 100);
-            tickUpper = tick + ((tick * int24(uint24(percentage))) / 100);
+            // if (
+            //     tick - ((tick * int24(uint24(percentage))) / 100) <
+            //     tick + ((tick * int24(uint24(percentage))) / 100)
+            // ) {
+            //     // tickLower = tick - ((tick * int24(uint24(percentage))) / 100);
+            //     // tickUpper = tick + ((tick * int24(uint24(percentage))) / 100);
+            // } else {
+            //     // tickLower = tick + ((tick * int24(uint24(percentage))) / 100);
+            //     // tickUpper = tick - ((tick * int24(uint24(percentage))) / 100);
+            // }
         }
+        TransferHelper.safeTransferFrom(
+            tokenA,
+            msg.sender,
+            address(this),
+            amountA
+        );
+
+        TransferHelper.safeTransferFrom(
+            tokenB,
+            msg.sender,
+            address(this),
+            amountB
+        );
+        // console.log("Tick Lower: ", uint256(int256((tickLower))));
+        // console.log("Tick Upper: ", uint256(int256((tickUpper))));
+        // Approve the position manager
+        TransferHelper.safeApprove(
+            tokenA,
+            address(nonfungiblePositionManager),
+            amountA
+        );
+        TransferHelper.safeApprove(
+            tokenB,
+            address(nonfungiblePositionManager),
+            amountB
+        );
+        console.log("1.BalanceOf: ", IERC20(tokenA).balanceOf(address(this)));
+        console.log("2.BalanceOf: ", IERC20(tokenB).balanceOf(address(this)));
+        console.log(
+            "1.Allowance: ",
+            IERC20(tokenA).allowance(
+                address(this),
+                address(nonfungiblePositionManager)
+            )
+        );
+        console.log(
+            "2.Allowance: ",
+            IERC20(tokenB).allowance(
+                address(this),
+                address(nonfungiblePositionManager)
+            )
+        );
         INonfungiblePositionManager.MintParams
             memory params = INonfungiblePositionManager.MintParams(
                 tokenA,
@@ -227,11 +291,12 @@ contract ClExecutor is ICLExecutor {
                 0,
                 0,
                 address(this),
-                (block.timestamp + 10)
+                (block.timestamp)
             );
 
         /* Logical blocks - limits stack usage */
         {
+            console.log("Minting NFT...");
             uint256 amountOfLiquidity = 0;
             (
                 tokenId,
@@ -243,6 +308,7 @@ contract ClExecutor is ICLExecutor {
             ) = nonfungiblePositionManager.mint(
                     params
                 ); /* state updated after interaction */
+            console.log("Deposit creation...");
             _createDeposit(msg.sender, tokenId);
             token.mint(amountOfLiquidity);
             token.transfer(msg.sender, amountOfLiquidity);
@@ -273,6 +339,17 @@ contract ClExecutor is ICLExecutor {
     }
 
     /** Public getters **/
+    function getRamsesPool(
+        address tokenA,
+        address tokenB,
+        uint24 fee
+    ) external view returns (IRamsesV2Pool) {
+        IRamsesV2Pool currentPool = IRamsesV2Pool(
+            ramsesV2Factory.getPool(tokenA, tokenB, fee)
+        ); /* The fee shall be also adjusted */
+        return currentPool;
+    }
+
     function calculateTriggerToCompound(
         address positionToken
     ) public view returns (uint256) {}
