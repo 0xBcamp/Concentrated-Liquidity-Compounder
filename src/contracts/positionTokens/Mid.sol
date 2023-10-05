@@ -5,15 +5,28 @@ pragma solidity >=0.7.5;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract Mid is ERC20 {
-    address immutable clExecutorAddress;
+    address immutable owner;
+    address clExecutorAddress;
 
-    constructor(address _clExecutorAddress) ERC20("Mid", "MID") {
-        clExecutorAddress = _clExecutorAddress;
+    constructor() ERC20("Mid", "MID") {
+        owner = msg.sender;
     }
 
     modifier onlyExecutor() {
-        require(msg.sender == clExecutorAddress, "Not executor");
+        require(
+            msg.sender == clExecutorAddress && address(0) == clExecutorAddress,
+            "Not executor or executor not set"
+        );
         _;
+    }
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    function setExecutor(address _clExecutorAddress) public onlyOwner {
+        clExecutorAddress = _clExecutorAddress;
     }
 
     function burn(uint256 amount) public onlyExecutor {

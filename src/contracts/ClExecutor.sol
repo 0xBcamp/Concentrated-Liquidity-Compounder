@@ -2,7 +2,9 @@
 
 pragma solidity >=0.7.5;
 
+import "@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol";
 import "./interfaces/ICLExecutor.sol";
+import "hardhat/console.sol";
 
 contract ClExecutor is ICLExecutor {
     /* Temporary */
@@ -19,7 +21,7 @@ contract ClExecutor is ICLExecutor {
     IRamsesV2Factory ramsesV2Factory =
         IRamsesV2Factory(0xAA2cd7477c451E703f3B9Ba5663334914763edF8);
 
-    mapping(address => uint256[]) userToNftIds;
+    mapping(uint256 => Deposit) deposits;
 
     constructor(
         address routerAddress,
@@ -33,7 +35,31 @@ contract ClExecutor is ICLExecutor {
         wideToken = IERC20MintableBurnable(wideAddress);
     }
 
+    // Implementing `onERC721Received` so this contract can receive custody of erc721 tokens
+    function onERC721Received(
+        address operator,
+        address,
+        uint _tokenId,
+        bytes calldata
+    ) external returns (bytes4) {
+        //_createDeposit(operator, _tokenId);
+        return this.onERC721Received.selector;
+    }
+
     /** Public setters **/
+
+    /** Function to get WETH from ETH
+     * @param wethAddress - address of WETH contract (0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 for mainnet)
+     */
+    function getWethFromEth(
+        address wethAddress
+    ) external payable returns (uint256) {
+        IWeth wEth = IWeth(wethAddress);
+        wEth.deposit{value: msg.value}();
+        //wEth.approve(msg.sender, wEth.balanceOf(address(this)));
+        wEth.transfer(msg.sender, wEth.balanceOf(address(this)));
+        return wEth.balanceOf(msg.sender);
+    }
 
     /**
     @dev Add liquidity to ramses and stake
@@ -45,38 +71,214 @@ contract ClExecutor is ICLExecutor {
         uint256 amountB,
         uint24 fee,
         ranges priceRange
-    ) public returns (uint256) {
-        uint160 sqrtPriceX96;
-        IRamsesV2Pool currentPool = IRamsesV2Pool(
-            ramsesV2Factory.getPool(tokenA, tokenB, fee)
-        ); /* The fee shall be also adjusted */
-        int24 tickLower = 0;
-        int24 tickUpper = 0;
-        uint256 amount = amountA; /* to be determmined */
+    ) external returns (uint256) {
+        uint256 tokenId = 0;
+        uint8 percentage = 0;
+        IERC20MintableBurnable token = wideToken;
         require(priceRange < ranges.MAX, "Price range not allowed");
-
-        (sqrtPriceX96, , , , , , ) = currentPool.slot0();
 
         if (ranges.NARROW == priceRange) {
             /* Range between +/- 2% range */
-            // tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 2) / 100);
-            // tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 2) / 100);
-            narrowToken.mint(amount);
-            narrowToken.transfer(msg.sender, amount);
+            percentage = 2;
+            token = narrowToken;
         } else if (ranges.MID == priceRange) {
             /* Range between +/- 5% range */
-            // tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 5) / 100);
-            // tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 5) / 100);
-            midToken.mint(amount);
-            midToken.transfer(msg.sender, amount);
+            percentage = 5;
+            token = midToken;
         } else {
             /* WIDE */
             /* Range between +/- 10% range */
-            // tickLower = sqrtPriceX96 - ((sqrtPriceX96 * 10) / 100);
-            // tickUpper = sqrtPriceX96 + ((sqrtPriceX96 * 10) / 100);
-            wideToken.mint(amount);
-            wideToken.transfer(msg.sender, amount);
+            percentage = 10;
         }
+        tokenId = _createDepositReflection(
+            tokenA,
+            tokenB,
+            amountA,
+            amountB,
+            fee,
+            percentage,
+            token
+        );
+        return tokenId;
+    }
+
+    /**
+    @dev Unstake and remove liquidity from ramses
+    */
+    function removeLiquidity(uint256 tokenId) external {
+        (
+            ,
+            ,
+            address tokenA,
+            address tokenB,
+            uint24 fee,
+            int24 tickLower,
+            int24 tickUpper,
+            uint128 liquidity,
+            ,
+            ,
+            ,
+
+        ) = nonfungiblePositionManager.positions(tokenId);
+
+        IRamsesV2Pool currentPool = IRamsesV2Pool(
+            ramsesV2Factory.getPool(tokenA, tokenB, fee)
+        ); /* The fee shall be also adjusted */
+        _collectRewards(tokenId);
+        currentPool.burn(tickLower, tickUpper, liquidity);
+        nonfungiblePositionManager.burn(tokenId);
+    }
+
+    function swapTokens(
+        address tokenIn,
+        address tokenOut,
+        uint256 amountIn
+    ) external returns (uint256) {
+        uint256 amountOut = 0;
+        TransferHelper.safeTransferFrom(
+            tokenIn,
+            msg.sender,
+            address(this),
+            amountIn
+        );
+
+        TransferHelper.safeApprove(tokenIn, address(swapRouter), amountIn);
+
+        ISwapRouter.ExactInputSingleParams memory params = ISwapRouter
+            .ExactInputSingleParams({
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                // pool fee 0.05%
+                fee: 500,
+                recipient: msg.sender,
+                deadline: block.timestamp,
+                amountIn: amountIn,
+                amountOutMinimum: 0,
+                // NOTE: In production, this value can be used to set the limit
+                // for the price the swap will push the pool to,
+                // which can help protect against price impact
+                sqrtPriceLimitX96: 0
+            });
+        amountOut = swapRouter.exactInputSingle(params);
+        return amountOut;
+    }
+
+    /**
+    @dev Collect gathered fees, collect gathered RAM token, provide collected fees into the pool, boost rewards with RAM token
+    */
+    function compoundPosition(uint256 tokenId) public returns (uint256) {
+        _collectRewards(tokenId);
+        //provideLiquidity(); /* to be filled */
+        _boostRewards(tokenId);
+    }
+
+    /** Private setters **/
+    function _createDeposit(address owner, uint _tokenId) internal {
+        (
+            ,
+            ,
+            address token0,
+            address token1,
+            ,
+            ,
+            ,
+            uint128 liquidity,
+            ,
+            ,
+            ,
+
+        ) = nonfungiblePositionManager.positions(_tokenId);
+        // set the owner and data for position
+        // operator is msg.sender
+        deposits[_tokenId] = Deposit({
+            owner: owner,
+            liquidity: liquidity,
+            token0: token0,
+            token1: token1
+        });
+
+        console.log("Token id", _tokenId);
+        console.log("Liquidity", liquidity);
+    }
+
+    function _createDepositReflection(
+        address tokenA,
+        address tokenB,
+        uint256 amountA,
+        uint256 amountB,
+        uint24 fee,
+        uint8 percentage,
+        IERC20MintableBurnable token
+    ) private returns (uint256) {
+        uint160 sqrtPriceX96;
+        int24 tickLower = TickMath.MIN_TICK;
+        int24 tickUpper = TickMath.MAX_TICK;
+        uint256 tokenId = 0;
+        /* Logical blocks - limits stack usage */
+        {
+            IRamsesV2Pool currentPool = IRamsesV2Pool(
+                ramsesV2Factory.getPool(tokenA, tokenB, fee)
+            ); /* The fee shall be also adjusted */
+            (sqrtPriceX96, , , , , , ) = currentPool.slot0();
+            //console.log("Price: %d", sqrtPriceX96);
+        }
+        /* Logical blocks - limits stack usage */
+        {
+            int24 tick = 0;
+            tick = TickMath.getTickAtSqrtRatio(sqrtPriceX96);
+            // if (
+            //     tick - ((tick * int24(uint24(percentage))) / 100) <
+            //     tick + ((tick * int24(uint24(percentage))) / 100)
+            // ) {
+            //     // tickLower = tick - ((tick * int24(uint24(percentage))) / 100);
+            //     // tickUpper = tick + ((tick * int24(uint24(percentage))) / 100);
+            // } else {
+            //     // tickLower = tick + ((tick * int24(uint24(percentage))) / 100);
+            //     // tickUpper = tick - ((tick * int24(uint24(percentage))) / 100);
+            // }
+        }
+        TransferHelper.safeTransferFrom(
+            tokenA,
+            msg.sender,
+            address(this),
+            amountA
+        );
+
+        TransferHelper.safeTransferFrom(
+            tokenB,
+            msg.sender,
+            address(this),
+            amountB
+        );
+        // console.log("Tick Lower: ", uint256(int256((tickLower))));
+        // console.log("Tick Upper: ", uint256(int256((tickUpper))));
+        // Approve the position manager
+        TransferHelper.safeApprove(
+            tokenA,
+            address(nonfungiblePositionManager),
+            amountA
+        );
+        TransferHelper.safeApprove(
+            tokenB,
+            address(nonfungiblePositionManager),
+            amountB
+        );
+        console.log("1.BalanceOf: ", IERC20(tokenA).balanceOf(address(this)));
+        console.log("2.BalanceOf: ", IERC20(tokenB).balanceOf(address(this)));
+        console.log(
+            "1.Allowance: ",
+            IERC20(tokenA).allowance(
+                address(this),
+                address(nonfungiblePositionManager)
+            )
+        );
+        console.log(
+            "2.Allowance: ",
+            IERC20(tokenB).allowance(
+                address(this),
+                address(nonfungiblePositionManager)
+            )
+        );
         INonfungiblePositionManager.MintParams
             memory params = INonfungiblePositionManager.MintParams(
                 tokenA,
@@ -89,63 +291,65 @@ contract ClExecutor is ICLExecutor {
                 0,
                 0,
                 address(this),
-                (block.timestamp + 10)
+                (block.timestamp)
             );
-        (
-            userToNftIds[msg.sender][uint256(priceRange)],
-            ,
-            ,
 
-        ) = nonfungiblePositionManager.mint(
-            params
-        ); /* state updated after interaction */
+        /* Logical blocks - limits stack usage */
+        {
+            console.log("Minting NFT...");
+            uint256 amountOfLiquidity = 0;
+            (
+                tokenId,
+                amountOfLiquidity,
+                /* amount0 */
+                /* amount1 */
+                ,
+
+            ) = nonfungiblePositionManager.mint(
+                    params
+                ); /* state updated after interaction */
+            console.log("Deposit creation...");
+            _createDeposit(msg.sender, tokenId);
+            token.mint(amountOfLiquidity);
+            token.transfer(msg.sender, amountOfLiquidity);
+        }
+
+        return tokenId;
     }
 
-    /**
-    @dev Unstake and remove liquidity from ramses
-    */
-    function removeLiquidity(address positionToken) public returns (uint256) {}
+    function _boostRewards(uint256 tokenId) private returns (uint256) {}
 
-    function swapTokens(
-        address tokenIn,
-        address tokenOut,
-        uint256 amountMin
-    ) public returns (uint256) {
-        bytes memory path = abi.encode(tokenIn, tokenOut);
-        ISwapRouter.ExactOutputParams memory params = ISwapRouter
-            .ExactOutputParams(
-                path,
-                msg.sender,
-                (block.timestamp + 10),
-                amountMin,
-                IERC20(tokenIn).balanceOf(msg.sender) // amountInMax
-            );
-        swapRouter.exactOutput(params);
-    }
+    function _collectRewards(
+        uint256 tokenId
+    ) private returns (uint256 amount0, uint256 amount1) {
+        // set amount0Max and amount1Max to uint256.max to collect all fees
+        // alternatively can set recipient to msg.sender and avoid another transaction in `sendToOwner`
+        INonfungiblePositionManager.CollectParams
+            memory params = INonfungiblePositionManager.CollectParams({
+                tokenId: tokenId,
+                recipient: address(this),
+                amount0Max: type(uint128).max,
+                amount1Max: type(uint128).max
+            });
 
-    /**
-    @dev Collect gathered fees, collect gathered RAM token, provide collected fees into the pool, boost rewards with RAM token
-    */
-    function compoundPosition(ranges priceRange) public returns (uint256) {
-        _collectRewards(priceRange);
-        //provideLiquidity(); /* to be filled */
-        _boostRewards(priceRange);
-    }
+        (amount0, amount1) = nonfungiblePositionManager.collect(params);
 
-    /** Private setters **/
-    function _boostRewards(ranges priceRange) private returns (uint256) {}
-
-    function _collectRewards(ranges priceRange) private returns (uint256) {
-        // bytes params = CollectParams(
-        //     userToNftIds[msg.sender][priceRange],
-        //     address(this),
-        //     0 /* ?? */,
-        //     0 /* ?? */
-        // );
-        // nonfungiblePositionManager.collect(params);
+        // console.log("fee 0", amount0);
+        // console.log("fee 1", amount1);
     }
 
     /** Public getters **/
+    function getRamsesPool(
+        address tokenA,
+        address tokenB,
+        uint24 fee
+    ) external view returns (IRamsesV2Pool) {
+        IRamsesV2Pool currentPool = IRamsesV2Pool(
+            ramsesV2Factory.getPool(tokenA, tokenB, fee)
+        ); /* The fee shall be also adjusted */
+        return currentPool;
+    }
+
     function calculateTriggerToCompound(
         address positionToken
     ) public view returns (uint256) {}
