@@ -48,7 +48,7 @@ contract ForkTest is Test {
     IERC20 iWeth = IERC20(WETH);
     IERC20 usdc = IERC20(USDC);
 
-    uint256 AMOUNT = 10e18;
+    uint256 AMOUNT = 1e18;
 
     // create two _different_ forks during setup
     function setUp() public {
@@ -153,7 +153,7 @@ contract ForkTest is Test {
             AMOUNT,
             usdc.balanceOf(address(this)),
             500,
-            IClExecutor.ranges.WIDE
+            IClExecutor.ranges.NARROW
         );
         tokenIds = clExecutor.getOwnerTokenIds(address(this));
         console2.log("Token ID: ", tokenId);

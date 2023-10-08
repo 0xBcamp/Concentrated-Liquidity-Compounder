@@ -329,14 +329,14 @@ contract VotingEscrow is IERC721, IERC721Metadata, IVotes, Initializable {
         address _spender,
         uint256 _tokenId
     ) internal view returns (bool) {
-        console2.log("For tokenId ", _tokenId);
+        //console2.log("For tokenId ", _tokenId);
 
         address owner = idToOwner[_tokenId];
-        console2.log("For owner ", owner);
+        //console2.log("For owner ", owner);
         bool spenderIsOwner = owner == _spender;
         bool spenderIsApproved = _spender == idToApprovals[_tokenId];
         bool spenderIsApprovedForAll = (ownerToOperators[owner])[_spender];
-        console2.log("Spender is %s and owner is %s", _spender, owner);
+        //console2.log("Spender is %s and owner is %s", _spender, owner);
         return spenderIsOwner || spenderIsApproved || spenderIsApprovedForAll;
     }
 

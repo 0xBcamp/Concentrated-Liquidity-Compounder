@@ -190,7 +190,7 @@ contract ClExecutor is IClExecutor {
         console2.log("Tokens are:");
         console2.log(token0, token1);
         address poolAddress = ramsesV2Factory.getPool(token0, token1, 500);
-        console2.log(">>>>>>>>>>>>>>>>>> POOOL ADDRESS ", address(poolAddress));
+        console2.log(">>>>>>>>>>>>>>>>>> Collecting rewards.... ");
 
         (amount0, amount1, farmAmounts) = _collectRewards(tokenId, poolAddress);
 
@@ -203,7 +203,12 @@ contract ClExecutor is IClExecutor {
         console2.log(farmAmounts[0]);
         console2.log(farmAmounts[1]);
         if (balance2 > 0 || balance1 > 0) {
+            // console2.log(
+            //     ">>>>>>>>>>>>>>>>>> Increasing positon.... "
+            //
+            // );
             //provideLiquidity(); /* to be filled */
+            console2.log(">>>>>>>>>>>>>>>>>> Boosting rewards.... ");
             _boostRewards(
                 tokenId,
                 IERC20(0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418).balanceOf(
@@ -408,6 +413,7 @@ contract ClExecutor is IClExecutor {
         );
         poolAddresses[0] = poolAddress;
         proportions[0] = 1000000; // 100%
+        console2.log(">>>>>>>>>>>>>>>>>> Creating lock.... ");
         veRamTokenId = votingEscrow.create_lock_for(
             ramAmount,
             126144000,
@@ -416,8 +422,10 @@ contract ClExecutor is IClExecutor {
 
         minter.update_period();
 
+        console2.log(">>>>>>>>>>>>>>>>>> Voting.... ");
         voter.vote(veRamTokenId, poolAddresses, proportions);
 
+        console2.log(">>>>>>>>>>>>>>>>>> Switching attachment.... ");
         nonfungiblePositionManager.switchAttachment(tokenId, veRamTokenId);
 
         return veRamTokenId;
