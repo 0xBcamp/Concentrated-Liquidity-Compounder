@@ -79,14 +79,14 @@ contract ForkTest is Test {
             0x92bAc42BBbb4946Df598D811F1B65132a263b8c7, //0x5EEAEfe423321Eb61268AfD60b7E7c99d711a386,
             address(ramsesV2Pool).code
         );
-        vm.etch(
-            0x80C4F687b81d77b33C6e3e572E2E80DcCc996733,
-            address(gaugeV2).code
-        );
-        vm.etch(
-            0xAAA343032aA79eE9a6897Dab03bef967c3289a06,
-            address(votingEscrow).code
-        );
+        // vm.etch(
+        //     0x80C4F687b81d77b33C6e3e572E2E80DcCc996733,
+        //     address(gaugeV2).code
+        // );
+        // vm.etch(
+        //     0xAAA343032aA79eE9a6897Dab03bef967c3289a06,
+        //     address(votingEscrow).code
+        // );
     }
 
     // demonstrate fork ids are unique
@@ -170,8 +170,9 @@ contract ForkTest is Test {
         console2.log(xRamBalance);
         console2.log(wethBalance);
         console2.log(usdcBalance);
-        (amount0, amount1, farmingAmounts) = clExecutor.compoundPosition(
-            tokenId
+        (amount0, amount1, farmingAmounts, , ) = clExecutor.compoundPosition(
+            tokenId,
+            IClExecutor.ranges.NARROW
         );
         console2.log(IERC20(WETH).balanceOf(address(clExecutor)));
         console2.log(IERC20(USDC).balanceOf(address(clExecutor)));
@@ -197,8 +198,9 @@ contract ForkTest is Test {
         // assert(ramBalance < IERC20(RAM).balanceOf(address(clExecutor)));
         // assert(xRamBalance < IERC20(XRAM).balanceOf(address(clExecutor)));
 
-        (amount0, amount1, farmingAmounts) = clExecutor.compoundPosition(
-            tokenId
+        (amount0, amount1, farmingAmounts, , ) = clExecutor.compoundPosition(
+            tokenId,
+            IClExecutor.ranges.NARROW
         );
         console2.log("Timestamp after: ", block.timestamp);
         console2.log("Amount0 gathered: %d", amount0);

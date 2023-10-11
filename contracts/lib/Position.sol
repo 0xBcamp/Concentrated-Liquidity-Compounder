@@ -482,11 +482,6 @@ library Position {
                     boostedPosition.veRamAmount,
                     states.boostInfos[period].totalVeRamAmount
                 );
-                console2.log(
-                    "Boost params: ",
-                    boostedLiquidityCache.veRamRatio,
-                    boostedLiquidityCache.newBoostedLiquidity
-                );
                 if (boostedLiquidityCache.newBoostedLiquidity > 0) {
                     PoolBalanceCache memory poolBalanceCache;
                     poolBalanceCache.poolBalance0 = States.balance0();

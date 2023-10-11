@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
+import {console2} from "forge-std/Test.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 library TransferHelper {
@@ -24,6 +25,9 @@ library TransferHelper {
                 value
             )
         );
+        console2.log("Token: ", token);
+        console2.log("Value: ", value);
+        console2.log("To:", to);
         require(
             success && (data.length == 0 || abi.decode(data, (bool))),
             "STF"

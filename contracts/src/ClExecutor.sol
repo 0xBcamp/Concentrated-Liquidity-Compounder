@@ -86,8 +86,22 @@ contract ClExecutor is IClExecutor {
         } else if (ranges.MID == priceRange) {
             token = midToken;
         }
+        TransferHelper.safeTransferFrom(
+            tokenA,
+            msg.sender,
+            address(this),
+            amountA
+        );
+
+        TransferHelper.safeTransferFrom(
+            tokenB,
+            msg.sender,
+            address(this),
+            amountB
+        );
+
         if (false == isPositionCreated(address(token))) {
-            console2.log("Creating new position...");
+            console2.log("<inside>Creating new position...");
             (tokenId, amountOfPositionToken) = _createNewPosition(
                 tokenA,
                 tokenB,
@@ -97,7 +111,7 @@ contract ClExecutor is IClExecutor {
                 token
             );
         } else {
-            console2.log("Increasing new position...");
+            console2.log("<inside>Increasing position...");
             tokenId = positionTokenToTokenId[address(token)];
             amountOfPositionToken = _increasePosition(
                 tokenA,
@@ -178,13 +192,30 @@ contract ClExecutor is IClExecutor {
     @dev Collect gathered fees, collect gathered RAM token, provide collected fees into the pool, boost rewards with RAM token
     */
     function compoundPosition(
-        uint256 tokenId
+        uint256 tokenId,
+        ranges range
     )
         public
-        returns (uint256 amount0, uint256 amount1, uint256[] memory farmAmounts)
+        returns (
+            uint256 amount0,
+            uint256 amount1,
+            uint256[] memory farmAmounts,
+            uint256 amountOfPositionToken,
+            uint256 veRamTokenId
+        )
     {
         address token0;
         address token1;
+
+        IPositionToken token = wideToken;
+        require(range < ranges.MAX, "Price range not allowed");
+
+        if (ranges.NARROW == range) {
+            token = narrowToken;
+        } else if (ranges.MID == range) {
+            token = midToken;
+        }
+
         console2.log("Token ID: ", tokenId);
         (token0, token1) = getTokensInPosition(tokenId);
         console2.log("Tokens are:");
@@ -194,22 +225,27 @@ contract ClExecutor is IClExecutor {
 
         (amount0, amount1, farmAmounts) = _collectRewards(tokenId, poolAddress);
 
-        uint256 balance1 = IERC20(0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418)
+        uint256 balance0 = IERC20(0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418)
             .balanceOf(address(this));
 
-        uint256 balance2 = IERC20(0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7)
+        uint256 balance1 = IERC20(0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7)
             .balanceOf(address(this));
-        console2.log(balance1, balance2);
+        console2.log(balance0, balance1);
         console2.log(farmAmounts[0]);
         console2.log(farmAmounts[1]);
-        if (balance2 > 0 || balance1 > 0) {
-            // console2.log(
-            //     ">>>>>>>>>>>>>>>>>> Increasing positon.... "
-            //
-            // );
-            //provideLiquidity(); /* to be filled */
+        if (balance1 > 0 || balance0 > 0) {
+            console2.log(">>>>>>>>>>>>>>>>>> Increasing positon.... ");
+            amountOfPositionToken = _increasePosition(
+                token0,
+                token1,
+                balance0,
+                balance1,
+                500,
+                tokenId,
+                token
+            );
             console2.log(">>>>>>>>>>>>>>>>>> Boosting rewards.... ");
-            _boostRewards(
+            veRamTokenId = _boostRewards(
                 tokenId,
                 IERC20(0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418).balanceOf(
                     address(this)
@@ -251,19 +287,7 @@ contract ClExecutor is IClExecutor {
             sqrtPriceX96,
             token.rangePercentage()
         );
-        TransferHelper.safeTransferFrom(
-            tokenA,
-            msg.sender,
-            address(this),
-            amountA
-        );
 
-        TransferHelper.safeTransferFrom(
-            tokenB,
-            msg.sender,
-            address(this),
-            amountB
-        );
         // Approve the position manager
         TransferHelper.safeApprove(
             tokenA,
@@ -325,18 +349,13 @@ contract ClExecutor is IClExecutor {
         uint256 amount1 = 0;
         uint256 amountOfLiquidity = 0;
         /* Logical blocks - limits stack usage */
-        TransferHelper.safeTransferFrom(
-            tokenA,
-            msg.sender,
-            address(this),
-            amountA
+        require(
+            IERC20(tokenA).balanceOf(address(this)) > 0,
+            "Not enough tokens"
         );
-
-        TransferHelper.safeTransferFrom(
-            tokenB,
-            msg.sender,
-            address(this),
-            amountB
+        require(
+            IERC20(tokenB).balanceOf(address(this)) > 0,
+            "Not enough tokens"
         );
         // Approve the position manager
         TransferHelper.safeApprove(
@@ -348,6 +367,18 @@ contract ClExecutor is IClExecutor {
             tokenB,
             address(nonfungiblePositionManager),
             amountB
+        );
+        console2.log(
+            IERC20(tokenA).allowance(
+                address(this),
+                address(nonfungiblePositionManager)
+            )
+        );
+        console2.log(
+            IERC20(tokenB).allowance(
+                address(this),
+                address(nonfungiblePositionManager)
+            )
         );
         INonfungiblePositionManager.IncreaseLiquidityParams
             memory params = INonfungiblePositionManager.IncreaseLiquidityParams(
@@ -365,7 +396,7 @@ contract ClExecutor is IClExecutor {
                 .increaseLiquidity(
                     params
                 ); /* state updated after interaction */
-
+            console2.log("After increasing");
             bool tokenAdded = false;
             for (
                 uint8 idx = 0;
@@ -470,16 +501,6 @@ contract ClExecutor is IClExecutor {
             );
         }
         (amount0, amount1) = nonfungiblePositionManager.collect(params);
-        // voter.claimClGaugeRewards(
-        //     [0x44C8877b663E16c83dfa763Ec1F0231bb3e569c4],
-        //     [
-        //         [
-        //             0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418,
-        //             0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7
-        //         ]
-        //     ],
-        //     [tokenId]
-        // );
     }
 
     /** Public getters **/

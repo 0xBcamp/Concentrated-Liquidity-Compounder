@@ -33,9 +33,6 @@ library LiquidityAmounts {
             sqrtRatioBX96,
             FixedPoint96.Q96
         );
-        console2.log("sqrtRatioAX96", sqrtRatioAX96);
-        console2.log("sqrtRatioBX96", sqrtRatioBX96);
-        console2.log("amount0", amount0);
         return
             toUint128(
                 FullMath.mulDiv(
@@ -135,10 +132,6 @@ library LiquidityAmounts {
             (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
         console2.log(uint256(liquidity) << FixedPoint96.RESOLUTION);
         console2.log(sqrtRatioBX96 - sqrtRatioAX96);
-        // console2.log(
-        //     (uint256(liquidity) << FixedPoint96.RESOLUTION) *
-        //         (sqrtRatioBX96 - sqrtRatioAX96)
-        // );
         return
             FullMath.mulDiv(
                 uint256(liquidity) << FixedPoint96.RESOLUTION,
@@ -157,9 +150,6 @@ library LiquidityAmounts {
         uint160 sqrtRatioBX96,
         uint128 liquidity
     ) internal pure returns (uint256 amount1) {
-        console2.log("sqrtRatioAX96", sqrtRatioAX96);
-        console2.log("sqrtRatioBX96", sqrtRatioBX96);
-        console2.log("liquidity", liquidity);
         if (sqrtRatioAX96 > sqrtRatioBX96)
             (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
 
