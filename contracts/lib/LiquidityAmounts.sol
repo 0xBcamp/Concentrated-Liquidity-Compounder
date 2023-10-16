@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 pragma solidity ^0.8.0;
 
+import {console2} from "forge-std/Test.sol";
 import "./FullMath.sol";
 import "./FixedPoint96.sol";
 
@@ -55,6 +56,9 @@ library LiquidityAmounts {
     ) internal pure returns (uint128 liquidity) {
         if (sqrtRatioAX96 > sqrtRatioBX96)
             (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
+        console2.log("sqrtRatioAX96", sqrtRatioAX96);
+        console2.log("sqrtRatioBX96", sqrtRatioBX96);
+        console2.log("amount1", amount1);
         return
             toUint128(
                 FullMath.mulDiv(
@@ -121,9 +125,13 @@ library LiquidityAmounts {
         uint160 sqrtRatioBX96,
         uint128 liquidity
     ) internal pure returns (uint256 amount0) {
+        console2.log("sqrtRatioAX96", sqrtRatioAX96);
+        console2.log("sqrtRatioBX96", sqrtRatioBX96);
+        console2.log("liquidity", liquidity);
         if (sqrtRatioAX96 > sqrtRatioBX96)
             (sqrtRatioAX96, sqrtRatioBX96) = (sqrtRatioBX96, sqrtRatioAX96);
-
+        console2.log(uint256(liquidity) << FixedPoint96.RESOLUTION);
+        console2.log(sqrtRatioBX96 - sqrtRatioAX96);
         return
             FullMath.mulDiv(
                 uint256(liquidity) << FixedPoint96.RESOLUTION,

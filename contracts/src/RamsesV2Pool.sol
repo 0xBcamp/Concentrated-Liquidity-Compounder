@@ -705,7 +705,6 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
                 veRamTokenId: veRamTokenId
             })
         );
-        console2.log(">>>>>>>>>2  After position... ");
         amount0 = uint256(amountInt.token0);
         amount1 = uint256(amountInt.token1);
 
@@ -713,11 +712,14 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
         uint256 balance1Before;
         if (amount0 > 0) balance0Before = States.balance0();
         if (amount1 > 0) balance1Before = States.balance1();
+        console2.log("Balances: ", amount0, amount1);
+        console2.log(">>>>>>>>>2  After balance... >>address: ", msg.sender);
         IRamsesV2MintCallback(msg.sender).ramsesV2MintCallback(
             amount0,
             amount1,
             data
         );
+        console2.log(">>>>>>>>>3  After callback... ");
         if (amount0 > 0)
             require(balance0Before.add(amount0) <= States.balance0(), "M0");
         if (amount1 > 0)
@@ -732,6 +734,7 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
             amount0,
             amount1
         );
+        console2.log(">>>>>>>>>4  End of func... ");
     }
 
     ///  IRamsesV2PoolActions
