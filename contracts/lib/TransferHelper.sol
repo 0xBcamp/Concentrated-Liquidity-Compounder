@@ -25,9 +25,6 @@ library TransferHelper {
                 value
             )
         );
-        console2.log("Token: ", token);
-        console2.log("Value: ", value);
-        console2.log("To:", to);
         require(
             success && (data.length == 0 || abi.decode(data, (bool))),
             "STF"

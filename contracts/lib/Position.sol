@@ -310,7 +310,6 @@ library Position {
                 veRamTokenId: params.veRamTokenId
             })
         );
-        console2.log("Amount0 delta");
         if (params.liquidityDelta != 0 || boostedLiquidityDelta != 0) {
             if (_slot0.tick < params.tickLower) {
                 // current tick is below the passed range; liquidity can only become in range by crossing from left to
@@ -344,7 +343,6 @@ library Position {
                     TickMath.getSqrtRatioAtTick(params.tickUpper),
                     params.liquidityDelta
                 );
-                console2.log("Amount1 delta");
                 amount1 = SqrtPriceMath.getAmount1Delta(
                     TickMath.getSqrtRatioAtTick(params.tickLower),
                     _slot0.sqrtPriceX96,

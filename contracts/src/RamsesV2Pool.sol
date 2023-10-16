@@ -712,7 +712,8 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
         uint256 balance1Before;
         if (amount0 > 0) balance0Before = States.balance0();
         if (amount1 > 0) balance1Before = States.balance1();
-        console2.log(">>>>>>>>>2  After balance... ");
+        console2.log("Balances: ", amount0, amount1);
+        console2.log(">>>>>>>>>2  After balance... >>address: ", msg.sender);
         IRamsesV2MintCallback(msg.sender).ramsesV2MintCallback(
             amount0,
             amount1,

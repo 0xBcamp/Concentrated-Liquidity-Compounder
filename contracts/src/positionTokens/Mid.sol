@@ -48,7 +48,7 @@ contract Mid is ERC20, IPositionToken {
             firstMintTimestamp = block.timestamp;
             _mint(_msgSender(), amount);
         } else {
-            _mint(_msgSender(), amount * (getRelativeSupply() / totalSupply()));
+            _mint(_msgSender(), (amount * getRelativeSupply()) / totalSupply());
         }
     }
 
@@ -62,7 +62,7 @@ contract Mid is ERC20, IPositionToken {
 
     function getRelativeSupply() public view returns (uint256) {
         if (firstMintTimestamp != 0) {
-            return (firstMintTimestamp / block.timestamp) * totalSupply(); // Here can be some other function
+            return (firstMintTimestamp * totalSupply()) / block.timestamp; // Here can be some other function
         } else {
             return 0;
         }

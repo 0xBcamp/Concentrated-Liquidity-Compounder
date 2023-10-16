@@ -3,7 +3,6 @@ pragma solidity ^0.8.13;
 
 import {Test, console2} from "forge-std/Test.sol";
 
-import {Counter} from "../src/Counter.sol";
 import {ClExecutor} from "../src/ClExecutor.sol";
 import {RamsesV2Pool} from "../src/RamsesV2Pool.sol";
 import {GaugeV2} from "../src/GaugeV2.sol";
@@ -45,16 +44,27 @@ contract ForkTest is Test {
     RamsesV2Pool ramsesV2Pool;
     GaugeV2 gaugeV2;
     VotingEscrow votingEscrow;
-    IERC20 iWeth = IERC20(WETH);
+    IERC20 weth = IERC20(WETH);
     IERC20 usdc = IERC20(USDC);
 
     uint256 AMOUNT = 1e18;
 
+    function createVolume() public {
+        clExecutor.getWethFromEth{value: 4 * AMOUNT}(WETH);
+        weth.approve(address(clExecutor), weth.balanceOf(address(this)));
+        clExecutor.swapTokens(WETH, USDC, 4 * AMOUNT);
+        usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+        clExecutor.swapTokens(USDC, WETH, usdc.balanceOf(address(this)));
+    }
+
     // create two _different_ forks during setup
     function setUp() public {
+        console2.log("SETUP: \n 1.Arbitrum fork creation");
         mainnetFork = vm.createFork(MAINNET_ALCHEMY_URL);
         arbitrumFork = vm.createFork(ARB_MAINNET_ALCHEMY_URL);
         vm.selectFork(arbitrumFork);
+
+        console2.log("\n 2.Contracts deployment");
         narrow = new Narrow();
         mid = new Mid();
         wide = new Wide();
@@ -67,18 +77,24 @@ contract ForkTest is Test {
             address(mid),
             address(wide)
         );
+
+        console2.log("  - Address of tester", address(this));
+        console2.log("  - Address of clExecutor", address(clExecutor));
+
+        console2.log("\n3. Configuration of position tokens:");
         narrow.setExecutor(address(clExecutor));
         mid.setExecutor(address(clExecutor));
         wide.setExecutor(address(clExecutor));
-        // console2.log("Balance Before: %s", iWeth.balanceOf(address(this)));
-        clExecutor.getWethFromEth{value: 4 * AMOUNT}(WETH);
-        // console2.log("Balance After: %s", iWeth.balanceOf(address(this)));
-        iWeth.approve(address(clExecutor), iWeth.balanceOf(address(this)));
 
-        vm.etch(
-            0x92bAc42BBbb4946Df598D811F1B65132a263b8c7, //0x5EEAEfe423321Eb61268AfD60b7E7c99d711a386,
-            address(ramsesV2Pool).code
-        );
+        console2.log("\n4. Getting wrapped ethereum");
+        clExecutor.getWethFromEth{value: 4 * AMOUNT}(WETH);
+        weth.approve(address(clExecutor), weth.balanceOf(address(this)));
+        console2.log("Swapping WETH to USDC");
+        clExecutor.swapTokens(WETH, USDC, AMOUNT);
+        // vm.etch(
+        //     0x92bAc42BBbb4946Df598D811F1B65132a263b8c7, //0x5EEAEfe423321Eb61268AfD60b7E7c99d711a386,
+        //     address(ramsesV2Pool).code
+        // );
         // vm.etch(
         //     0x80C4F687b81d77b33C6e3e572E2E80DcCc996733,
         //     address(gaugeV2).code
@@ -90,7 +106,7 @@ contract ForkTest is Test {
     }
 
     // demonstrate fork ids are unique
-    function testForkIdDiffer() public {
+    function testForkIdDiffer() public view {
         assert(mainnetFork != arbitrumFork);
     }
 
@@ -130,23 +146,62 @@ contract ForkTest is Test {
     function testProvidingLiquidity() public {
         uint256[] memory tokenIds;
         uint256 tokenId;
+
+        console2.log("\nPROVIDE LIQUIDITY:\n 1.Approving tokens to spend.");
+        weth.approve(address(clExecutor), AMOUNT);
+        usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+
+        console2.log(
+            "\n 2.Providing liquidity for WETH/USDC pair with narrow range"
+        );
+        (tokenId, ) = clExecutor.provideLiquidity(
+            WETH,
+            USDC,
+            AMOUNT,
+            usdc.balanceOf(address(this)),
+            500,
+            IClExecutor.ranges.NARROW
+        );
+
+        console2.log("  - Token ID: ", tokenId);
+        console2.log(
+            "  - Amount of token ids after: %d",
+            clExecutor.getOwnerTokenIds(address(this)).length
+        );
+
+        /* Total length of token ids should be greater than before */
+        assert(
+            (tokenIds.length + 1) ==
+                clExecutor.getOwnerTokenIds(address(this)).length
+        );
+        /* Position tokens shall reflect specific postion correctly */
+        assertEq(wide.balanceOf(address(this)), 0);
+        assertEq(mid.balanceOf(address(this)), 0);
+        assert(narrow.balanceOf(address(this)) > 0);
+    }
+
+    function testCollectingRewards() public {
+        uint256[] memory tokenIds;
+        uint256 tokenId;
         uint256 prevAmount0;
         uint256 prevAmount1;
         uint256 amount0;
         uint256 amount1;
         uint256[] memory farmingAmounts;
-        uint256 ramBalance;
-        uint256 xRamBalance;
-        uint256 wethBalance;
-        uint256 usdcBalance;
+        address poolAddress;
 
-        // console2.log("Before: %s ", usdc.balanceOf(address(this)));
-        clExecutor.swapTokens(WETH, USDC, AMOUNT);
-        // console2.log("After: %s ", usdc.balanceOf(address(this)));
-        iWeth.approve(address(clExecutor), AMOUNT);
+        //address nfm = clExecutor.getAddressOfNonFungibleManager();
+
+        console2.log("\nCOLLECT REWARDS:\n 1.Approving tokens to spend.");
+        weth.approve(address(clExecutor), AMOUNT);
         usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
-        tokenIds = clExecutor.getOwnerTokenIds(address(this));
 
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+        console2.log(
+            "\n 2.Providing liquidity for WETH/USDC pair with narrow range"
+        );
         (tokenId, ) = clExecutor.provideLiquidity(
             WETH,
             USDC,
@@ -156,66 +211,174 @@ contract ForkTest is Test {
             IClExecutor.ranges.NARROW
         );
         tokenIds = clExecutor.getOwnerTokenIds(address(this));
-        console2.log("Token ID: ", tokenId);
-        console2.log("TokenIds after: %d", tokenIds.length);
-        createVolume();
-        ramBalance = IERC20(RAM).balanceOf(address(clExecutor));
-        xRamBalance = IERC20(XRAM).balanceOf(address(clExecutor));
-        // assert(ramBalance > 0);
-        // assert(xRamBalance > 0);
+        console2.log("  - Token ID: ", tokenId);
+        console2.log("  - Amount of token ids after: %d", tokenIds.length);
 
-        wethBalance = IERC20(WETH).balanceOf(address(clExecutor));
-        usdcBalance = IERC20(USDC).balanceOf(address(clExecutor));
-        console2.log(ramBalance);
-        console2.log(xRamBalance);
-        console2.log(wethBalance);
-        console2.log(usdcBalance);
-        (amount0, amount1, farmingAmounts, , ) = clExecutor.compoundPosition(
+        console2.log("\n 3. Volume creation");
+        createVolume();
+
+        console2.log("\n 4. Collect rewards");
+        poolAddress = address(clExecutor.getRamsesPool(WETH, USDC, 500));
+        (amount0, amount1, farmingAmounts) = clExecutor._collectRewards(
             tokenId,
-            IClExecutor.ranges.NARROW
+            address(poolAddress)
         );
-        console2.log(IERC20(WETH).balanceOf(address(clExecutor)));
-        console2.log(IERC20(USDC).balanceOf(address(clExecutor)));
+        // console2.log(IERC20(WETH).balanceOf(address(clExecutor)));
+        // console2.log(IERC20(USDC).balanceOf(address(clExecutor)));
         prevAmount0 = amount0;
         prevAmount1 = amount1;
-        console2.log("Amount0 gathered: %d", amount0);
-        console2.log("Amount1 gathered: %d", amount1);
+        console2.log("  - Amount0 gathered: %d", amount0);
+        console2.log("  - Amount1 gathered: %d", amount1);
         for (uint8 idx = 0; idx < farmingAmounts.length; idx++) {
-            console2.log("Farmed : %d", farmingAmounts[idx]);
+            console2.log("  - Farmed : %d", farmingAmounts[idx]);
         }
 
+        console2.log("  - Balances:");
+        console2.log(
+            "    - WETH: ",
+            IERC20(WETH).balanceOf(address(clExecutor))
+        );
+        console2.log(
+            "    - USDC: ",
+            IERC20(USDC).balanceOf(address(clExecutor))
+        );
+
+        /* First assertions - rewards in WETH and USDC tokens should appear and be equal to the balance in the ClExecutor contract */
+        // assert(amount0 == IERC20(WETH).balanceOf(address(clExecutor)));
+        // assert(amount1 == IERC20(USDC).balanceOf(address(clExecutor)));
+        assert(amount0 > 0);
+        assert(amount1 > 0);
+
+        console2.log("\n 5. Additional volume creation (3x more)");
         createVolume();
         createVolume();
         createVolume();
-        // assert(ramBalance < IERC20(RAM).balanceOf(address(clExecutor)));
-        // assert(xRamBalance < IERC20(XRAM).balanceOf(address(clExecutor)));
+
+        console2.log("\n 6. Collect rewards again.....");
+        (amount0, amount1, farmingAmounts) = clExecutor._collectRewards(
+            tokenId,
+            address(poolAddress)
+        );
+
+        console2.log("  - Amount0 gathered: %d", amount0);
+        console2.log("  - Amount1 gathered: %d", amount1);
+        for (uint8 idx = 0; idx < farmingAmounts.length; idx++) {
+            console2.log("  - Farmed : %d", farmingAmounts[idx]);
+        }
+
+        console2.log(
+            "  - RAM tokens gathered: ",
+            IERC20(RAM).balanceOf(address(clExecutor))
+        );
+        console2.log(
+            "  - xRAM tokens gathered: ",
+            IERC20(XRAM).balanceOf(address(clExecutor))
+        );
+        console2.log("  - Wide tokens: ", wide.balanceOf(address(this)));
+        console2.log("  - Mid tokens: ", mid.balanceOf(address(this)));
+        console2.log("  - Narrow tokens: ", narrow.balanceOf(address(this)));
+
+        /* Last asertions */
+        /* Balance of position tokens should be proper */
+        assertEq(wide.balanceOf(address(this)), 0);
+        assertEq(mid.balanceOf(address(this)), 0);
+        assert(narrow.balanceOf(address(this)) > 0);
+
+        // console2.log("Balances:");
+        // console2.log(IERC20(WETH).balanceOf(address(clExecutor)));
+        // console2.log(IERC20(USDC).balanceOf(address(clExecutor)));
+        /* Tokens gathered from last collect operation should be less than all amount of tokens gathered - not Applied because createVolume violate this for now */
+        // assert(amount0 < IERC20(WETH).balanceOf(address(clExecutor)));
+        // assert(amount1 < IERC20(USDC).balanceOf(address(clExecutor)));
+        /* Tokens gathered from last collect operation should be more than all amount gathered previously */
+        assert(amount0 > prevAmount0);
+        assert(amount1 > prevAmount1);
+    }
+
+    function testBoostingRewards() public {
+        uint256[] memory tokenIds;
+        uint256 tokenId;
+        uint256 amount0;
+        uint256 amount1;
+        uint256[] memory farmingAmounts;
+        uint256 ramBalance;
+        uint256 xRamBalance;
+        address poolAddress;
+        uint256 veRamTokenId;
+
+        //address nfm = clExecutor.getAddressOfNonFungibleManager();
+
+        console2.log("\nBOOST REWARDS:\n 1.Approving tokens to spend.");
+        weth.approve(address(clExecutor), AMOUNT);
+        usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+        console2.log(
+            "\n 2.Providing liquidity for WETH/USDC pair with mid range"
+        );
+        (tokenId, ) = clExecutor.provideLiquidity(
+            WETH,
+            USDC,
+            AMOUNT,
+            usdc.balanceOf(address(this)),
+            500,
+            IClExecutor.ranges.MID
+        );
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+        console2.log("  - Token ID: ", tokenId);
+        console2.log("  - Amount of token ids after: %d", tokenIds.length);
+
+        console2.log("\n 3. Volume creation");
+        createVolume();
+
+        console2.log("  - Timestamp before: ", block.timestamp);
+        vm.warp(block.timestamp + 5 weeks);
+
+        console2.log("  - Timestamp after: ", block.timestamp);
+
+        console2.log("\n 4. Collect rewards");
+        poolAddress = address(clExecutor.getRamsesPool(WETH, USDC, 500));
+        (amount0, amount1, farmingAmounts) = clExecutor._collectRewards(
+            tokenId,
+            address(poolAddress)
+        );
+        console2.log("  - Amount0 gathered: %d", amount0);
+        console2.log("  - Amount1 gathered: %d", amount1);
+        console2.log("  - RAM tokens balances:");
         ramBalance = IERC20(RAM).balanceOf(address(clExecutor));
         xRamBalance = IERC20(XRAM).balanceOf(address(clExecutor));
-        console2.log(ramBalance);
-        console2.log(xRamBalance);
-        console2.log("Timestamp before: ", block.timestamp);
-        vm.warp(block.timestamp + 5 weeks);
-        // assert(ramBalance < IERC20(RAM).balanceOf(address(clExecutor)));
-        // assert(xRamBalance < IERC20(XRAM).balanceOf(address(clExecutor)));
+        console2.log("    - RAM: ", ramBalance);
+        console2.log("    - XRAM: ", xRamBalance);
 
-        (amount0, amount1, farmingAmounts, , ) = clExecutor.compoundPosition(
+        console2.log("\n 5. Boosting rewards.....");
+        veRamTokenId = clExecutor._boostRewards(
             tokenId,
-            IClExecutor.ranges.NARROW
+            ramBalance,
+            poolAddress
         );
-        console2.log("Timestamp after: ", block.timestamp);
-        console2.log("Amount0 gathered: %d", amount0);
-        console2.log("Amount1 gathered: %d", amount1);
+
         // assert(amount0 > prevAmount0);
         // assert(amount1 > prevAmount1);
-        for (uint8 idx = 0; idx < farmingAmounts.length; idx++) {
-            console2.log("Farmed : %d", farmingAmounts[idx]);
-        }
-        console2.log("Address of tester", address(this));
-        console2.log("Address of clExecutor", address(clExecutor));
-        console2.log("RAM tokens gathered: ");
-        console2.log(IERC20(RAM).balanceOf(address(clExecutor)));
-        console2.log("xRAM tokens gathered: ");
-        console2.log(IERC20(XRAM).balanceOf(address(clExecutor)));
+        console2.log(
+            "  - RAM tokens gathered: ",
+            IERC20(RAM).balanceOf(address(clExecutor))
+        );
+        console2.log(
+            "  - xRAM tokens gathered: ",
+            IERC20(XRAM).balanceOf(address(clExecutor))
+        );
+        console2.log("  - Wide tokens: ", wide.balanceOf(address(this)));
+        console2.log("  - Mid tokens: ", mid.balanceOf(address(this)));
+        console2.log("  - Narrow tokens: ", narrow.balanceOf(address(this)));
+
+        assertEq(wide.balanceOf(address(this)), 0);
+        assertEq(narrow.balanceOf(address(this)), 0);
+        assert(mid.balanceOf(address(this)) > 0);
+
+        assertEq(0, IERC20(RAM).balanceOf(address(clExecutor)));
+        assert(xRamBalance > 0);
+        assertEq(xRamBalance, IERC20(XRAM).balanceOf(address(clExecutor)));
     }
 
     function testIncreasingLiquidity() public {
@@ -223,18 +386,21 @@ contract ForkTest is Test {
         uint256 tokenId;
         uint256 liquidityOfPosition;
 
-        clExecutor.swapTokens(WETH, USDC, AMOUNT);
-        iWeth.approve(address(clExecutor), AMOUNT);
+        console2.log("\nINCREASE LIQUIDITY:\n 1.Approving tokens to spend.");
+        weth.approve(address(clExecutor), AMOUNT);
         usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
         tokenIds = clExecutor.getOwnerTokenIds(address(this));
         for (uint8 idx = 0; idx < tokenIds.length; idx++) {
             console2.log(tokenIds[idx]);
         }
-        console2.log(
-            "Position created: ",
-            clExecutor.isPositionCreated(address(wide))
-        );
 
+        console2.log(
+            "  - Position created: ",
+            clExecutor.isPositionCreated(address(wide))
+        );
+        console2.log(
+            "\n 2.Providing liquidity (position creation) for WETH/USDC pair with wide range"
+        );
         (tokenId, ) = clExecutor.provideLiquidity(
             WETH,
             USDC,
@@ -244,19 +410,23 @@ contract ForkTest is Test {
             IClExecutor.ranges.WIDE
         );
         liquidityOfPosition = clExecutor.getLiquidityOfPosition(tokenId);
-        console2.log("Liquidity of position: ", liquidityOfPosition);
+        console2.log("  - Liquidity of position: ", liquidityOfPosition);
         tokenIds = clExecutor.getOwnerTokenIds(address(this));
         for (uint8 idx = 0; idx < tokenIds.length; idx++) {
             console2.log(tokenIds[idx]);
         }
         console2.log(
-            "Position created: ",
+            "  - Position created: ",
             clExecutor.isPositionCreated(address(wide))
         );
-        iWeth.approve(address(clExecutor), AMOUNT);
+        console2.log("\n 3. Approving and swapping...");
+        weth.approve(address(clExecutor), AMOUNT);
         clExecutor.swapTokens(WETH, USDC, AMOUNT);
-        iWeth.approve(address(clExecutor), AMOUNT);
+        weth.approve(address(clExecutor), AMOUNT);
         usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+        console2.log(
+            "\n 4.Providing liquidity (Increasing position) for WETH/USDC pair with wide range"
+        );
         (tokenId, ) = clExecutor.provideLiquidity(
             WETH,
             USDC,
@@ -265,24 +435,143 @@ contract ForkTest is Test {
             500,
             IClExecutor.ranges.WIDE
         );
-        console2.log("TokenIds: ");
+        console2.log("  - TokenIds: ");
         tokenIds = clExecutor.getOwnerTokenIds(address(this));
         for (uint8 idx = 0; idx < tokenIds.length; idx++) {
             console2.log(tokenIds[idx]);
         }
-        // assert(tokenIds.length == 1);
-        // assert(
-        //     liquidityOfPosition < clExecutor.getLiquidityOfPosition(tokenId)
-        // );
+        assert(tokenIds.length == 1);
+        assert(
+            liquidityOfPosition < clExecutor.getLiquidityOfPosition(tokenId)
+        );
         liquidityOfPosition = clExecutor.getLiquidityOfPosition(tokenId);
-        console2.log("Liquidity of position: ", liquidityOfPosition);
+        console2.log("  - Liquidity of position: ", liquidityOfPosition);
     }
 
-    function createVolume() public {
-        clExecutor.getWethFromEth{value: 4 * AMOUNT}(WETH);
-        iWeth.approve(address(clExecutor), iWeth.balanceOf(address(this)));
-        clExecutor.swapTokens(WETH, USDC, 4 * AMOUNT);
+    function testCompoundingRewards() public {
+        uint256[] memory tokenIds;
+        uint256 tokenId;
+        uint256 prevAmount0;
+        uint256 prevAmount1;
+        uint256 amount0;
+        uint256 amount1;
+        uint256[] memory farmingAmounts;
+        uint256 ramBalance;
+        uint256 xRamBalance;
+
+        //address nfm = clExecutor.getAddressOfNonFungibleManager();
+
+        console2.log("\nCOMPOUND LIQUIDITY:\n 1.Approving tokens to spend.");
+        weth.approve(address(clExecutor), AMOUNT);
         usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
-        clExecutor.swapTokens(USDC, WETH, usdc.balanceOf(address(this)));
+
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+
+        console2.log(
+            "\n 2.Providing liquidity for WETH/USDC pair with wide range"
+        );
+        (tokenId, ) = clExecutor.provideLiquidity(
+            WETH,
+            USDC,
+            AMOUNT,
+            usdc.balanceOf(address(this)),
+            500,
+            IClExecutor.ranges.WIDE
+        );
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+        console2.log("  - Token ID: ", tokenId);
+        console2.log("  - Amount of token ids after: %d", tokenIds.length);
+
+        console2.log("\n 3. Volume creation");
+        createVolume();
+
+        console2.log("\n 4. Compounding....");
+        (amount0, amount1, farmingAmounts, , ) = clExecutor.compoundPosition(
+            tokenId,
+            IClExecutor.ranges.WIDE
+        );
+        prevAmount0 = amount0;
+        prevAmount1 = amount1;
+        console2.log("  - Amount0 gathered: %d", amount0);
+        console2.log("  - Amount1 gathered: %d", amount1);
+        for (uint8 idx = 0; idx < farmingAmounts.length; idx++) {
+            console2.log("  - Farmed : %d", farmingAmounts[idx]);
+        }
+
+        console2.log("  - Balances:");
+        console2.log(
+            "    - WETH: ",
+            IERC20(WETH).balanceOf(address(clExecutor))
+        );
+        console2.log(
+            "    - USDC: ",
+            IERC20(USDC).balanceOf(address(clExecutor))
+        );
+
+        /* First assertions - rewards in WETH and USDC tokens should appear and be equal to the balance in the ClExecutor contract */
+        assert(amount0 > 0);
+        assert(amount1 > 0);
+
+        console2.log("\n 5. Additional volume creation (3x more)");
+        createVolume();
+        createVolume();
+        createVolume();
+
+        console2.log("  - Timestamp before: ", block.timestamp);
+        vm.warp(block.timestamp + 5 weeks);
+
+        console2.log("  - Timestamp after: ", block.timestamp);
+        ramBalance = IERC20(RAM).balanceOf(address(clExecutor));
+        xRamBalance = IERC20(XRAM).balanceOf(address(clExecutor));
+        console2.log(
+            "  - RAM tokens gathered: ",
+            IERC20(RAM).balanceOf(address(clExecutor))
+        );
+        console2.log(
+            "  - xRAM tokens gathered: ",
+            IERC20(XRAM).balanceOf(address(clExecutor))
+        );
+
+        // clExecutor.swapTokens(WETH, USDC, AMOUNT);
+        // console2.log("Weth transfers");
+        // weth.transfer(nfm, (AMOUNT / 2));
+        // weth.transfer(address(clExecutor), (AMOUNT / 2));
+        // console2.log("Usdc transfers");
+        // usdc.transfer(nfm, (usdc.balanceOf(address(this)) / 2));
+        // usdc.transfer(address(clExecutor), usdc.balanceOf(address(this)));
+
+        console2.log("\n 6. Compounding.....");
+        (amount0, amount1, farmingAmounts, , ) = clExecutor.compoundPosition(
+            tokenId,
+            IClExecutor.ranges.WIDE
+        );
+
+        console2.log("  - Amount0 gathered: %d", amount0);
+        console2.log("  - Amount1 gathered: %d", amount1);
+        for (uint8 idx = 0; idx < farmingAmounts.length; idx++) {
+            console2.log("  - Farmed : %d", farmingAmounts[idx]);
+        }
+
+        console2.log(
+            "  - RAM tokens gathered: ",
+            IERC20(RAM).balanceOf(address(clExecutor))
+        );
+        console2.log(
+            "  - xRAM tokens gathered: ",
+            IERC20(XRAM).balanceOf(address(clExecutor))
+        );
+        console2.log("  - Wide tokens: ", wide.balanceOf(address(this)));
+        console2.log("  - Mid tokens: ", mid.balanceOf(address(this)));
+        console2.log("  - Narrow tokens: ", narrow.balanceOf(address(this)));
+
+        /* Last asertions */
+        /* Balance of position tokens should be proper */
+        assertEq(narrow.balanceOf(address(this)), 0);
+        assertEq(mid.balanceOf(address(this)), 0);
+        assert(wide.balanceOf(address(this)) > 0);
+
+        /* Tokens gathered from last collect operation should be more than all amount gathered previously */
+        assert(amount0 > prevAmount0);
+        assert(amount1 > prevAmount1);
     }
 }
