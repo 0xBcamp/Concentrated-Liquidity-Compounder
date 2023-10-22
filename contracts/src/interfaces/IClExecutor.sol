@@ -14,6 +14,7 @@ import "../../interfaces/ERCStandards/IWeth.sol";
 import "../../interfaces/IRamsesV2GaugeFactory.sol";
 import "../../interfaces/IGaugeV2.sol";
 import "../../lib/TickMath.sol";
+import "../../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 
 interface IClExecutor {
     struct Deposit {
@@ -29,4 +30,7 @@ interface IClExecutor {
         WIDE,
         MAX
     }
+
+    error WrongRangesPassed(ranges);
+    error PositionNotFound();
 }
