@@ -64,3 +64,37 @@ $ forge --help
 $ anvil --help
 $ cast --help
 ```
+
+### Miguel instructions
+
+forge compile --via-ir
+
+forge test --via-ir -vvv
+
+cd src
+
+scientific_peach@pop-os:~/fake/work/Concentrated-Liquidity-Compounder/contracts/src$ forge create ClExecutor --via-ir
+[⠰] Compiling...
+No files changed, compilation skipped
+Error: 
+error sending request for url (http://localhost:8545/): error trying to connect: tcp connect error: Connection refused (os error 111)
+
+Context:
+- Error #0: error trying to connect: tcp connect error: Connection refused (os error 111)
+- Error #1: tcp connect error: Connection refused (os error 111)
+- Error #2: Connection refused (os error 111)
+
+    address ROUTER_V2 = 0xAA23611badAFB62D37E7295A682D21960ac85A90;
+
+    these are all the contracts you need to compile :        narrow = new Narrow();
+
+        mid = new Mid();
+        wide = new Wide();
+        ramsesV2Pool = new RamsesV2Pool();
+        gaugeV2 = new GaugeV2();
+        votingEscrow = new VotingEscrow();
+        clExecutor = new ClExecutor(
+
+private key:
+        
+0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
