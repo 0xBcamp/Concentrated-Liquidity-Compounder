@@ -64,3 +64,14 @@ $ forge --help
 $ anvil --help
 $ cast --help
 ```
+
+### Miguel instructions
+
+forge compile --via-ir
+
+forge test --via-ir -vvv
+
+cd src
+
+scientific_peach@pop-os:~/fake/work/Concentrated-Liquidity-Compounder/contracts/src$ forge create ClExecutor --via-ir
+
