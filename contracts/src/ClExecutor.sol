@@ -523,7 +523,7 @@ contract ClExecutor is IClExecutor, Ownable {
             console2.log(">>>>>>>>>>>>>>>>>> Creating lock.... ");
             veRamTokenId = votingEscrow.create_lock_for(
                 ramAmount,
-                126144000,
+                126144000 / 4,
                 address(this)
             ); // 126144000 - 4 years
 

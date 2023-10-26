@@ -298,7 +298,7 @@ library Position {
         Slot0 memory _slot0 = states.slot0; // SLOAD for gas optimization
 
         int128 boostedLiquidityDelta;
-        console2.log("Updating position...");
+        // console2.log("Updating position...");
         (position, boostedLiquidityDelta) = _updatePosition(
             UpdatePositionParams({
                 owner: params.owner,
@@ -559,7 +559,6 @@ library Position {
                                 .newBoostedLiquidity = boostedLiquidityCap;
                         }
                     }
-                    console2.log("Ve Ram boost");
                     // veRam boost available
                     uint256 veRamBoostAvailable;
                     VeRamBoostCache memory veRamBoostCache;
@@ -601,12 +600,10 @@ library Position {
                         {
                             uint256 maxBalance0 = 0;
                             uint256 maxBalance1 = 0;
-                            console2.log("Geting amount ");
                             if (
                                 boostedLiquidityCache.currentSqrtRatioX96 <
                                 boostedLiquidityCache.lowerSqrtRatioX96
                             ) {
-                                console2.log("IF Geting amount ");
                                 maxBalance0 = LiquidityAmounts
                                     .getAmount0ForLiquidity(
                                         boostedLiquidityCache.lowerSqrtRatioX96,
@@ -617,8 +614,6 @@ library Position {
                                 boostedLiquidityCache.currentSqrtRatioX96 <
                                 boostedLiquidityCache.upperSqrtRatioX96
                             ) {
-                                console2.log("ELSE IF Geting amount ");
-                                console2.log("0");
                                 maxBalance0 = LiquidityAmounts
                                     .getAmount0ForLiquidity(
                                         boostedLiquidityCache
@@ -626,7 +621,7 @@ library Position {
                                         boostedLiquidityCache.upperSqrtRatioX96,
                                         type(uint128).max
                                     );
-                                console2.log("1");
+
                                 maxBalance1 = LiquidityAmounts
                                     .getAmount1ForLiquidity(
                                         boostedLiquidityCache.lowerSqrtRatioX96,
@@ -635,7 +630,6 @@ library Position {
                                         type(uint128).max
                                     );
                             } else {
-                                console2.log("1");
                                 maxBalance1 = LiquidityAmounts
                                     .getAmount1ForLiquidity(
                                         boostedLiquidityCache.lowerSqrtRatioX96,
@@ -657,7 +651,6 @@ library Position {
                                     .poolBalance1;
                             }
                         }
-                        console2.log("Geting liquidity for amounts");
                         // hypothetical liquidity is found by using all of balance0 and balance1
                         // at current price to determine % boamountost used since boost will fill up fast otherwise
                         uint256 hypotheticalLiquidity = LiquidityAmounts
@@ -668,7 +661,6 @@ library Position {
                                 poolBalanceCache.hypBalance0,
                                 poolBalanceCache.hypBalance1
                             );
-                        console2.log("Multiplications...");
                         hypotheticalLiquidity = FullMath.mulDiv(
                             hypotheticalLiquidity,
                             boostedLiquidityCache.veRamRatio,
@@ -765,7 +757,6 @@ library Position {
                     states.maxLiquidityPerTick
                 )
             );
-            console2.log("Ticks updates/fliping");
             cache.flippedUpper = Tick.update(
                 states._ticks,
                 Tick.UpdateTickParams(
@@ -835,7 +826,6 @@ library Position {
                     secondsPerBoostedLiquidityPeriodX128
                 );
             }
-            console2.log("Update position Liquidity");
             _updatePositionLiquidity(
                 position,
                 states,

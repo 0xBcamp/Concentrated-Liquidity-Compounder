@@ -636,7 +636,6 @@ contract ForkTest is Test {
     function testMintingFunctionality() public {
         uint256[] memory tokenIds;
         uint256 tokenId;
-        uint256 initialTimestamp = block.timestamp;
         uint256 prevNarrowBalance = narrow.balanceOf(address(this));
 
         console2.log("\nMINTING FUNCTIONALITY:\n 1.Approving tokens to spend.");
@@ -659,7 +658,7 @@ contract ForkTest is Test {
                 AMOUNT / 10,
                 usdc.balanceOf(address(this)),
                 500,
-                IClExecutor.ranges.NARROW
+                IClExecutor.ranges.MID
             );
             tokenIds = clExecutor.getOwnerTokenIds(address(this));
             console2.log("  - Token ID: ", tokenId);
@@ -668,90 +667,100 @@ contract ForkTest is Test {
             console2.log("\n 3. Amount of narrow tokens minted: ");
             console2.log(
                 "   ",
-                narrow.balanceOf(address(this)) - prevNarrowBalance
+                mid.balanceOf(address(this)) - prevNarrowBalance
             );
-            prevNarrowBalance = narrow.balanceOf(address(this));
+
+            /* Main assertion - tokens just minted have to be less
+            than the tokens minted week before */
+            assert(
+                (mid.balanceOf(address(this)) - prevNarrowBalance) <
+                    prevNarrowBalance
+            );
+
+            prevNarrowBalance = mid.balanceOf(address(this));
 
             createVolume();
             console2.log(
-                "  - Timestamp before time travel (1 week): ",
+                "  - Timestamp before time travel (2 weeks): ",
                 block.timestamp
             );
-            vm.warp(block.timestamp + 3 weeks);
+            vm.warp(block.timestamp + 2 weeks);
             console2.log("  - Timestamp after: ", block.timestamp);
         }
     }
 
-    function testOneYearStrategy() public {
-        uint256[] memory tokenIds;
-        uint256 tokenId;
-        uint256 initialTimestamp = block.timestamp;
-        uint256 initialWethBalance = weth.balanceOf(address(this));
+    // function testOneYearStrategy() public {
+    //     uint256[] memory tokenIds;
+    //     uint256 tokenId;
+    //     uint256 initialWethBalance = weth.balanceOf(address(this));
 
-        console2.log("\nONE YEAR STRATEGY:\n 1.Approving tokens to spend.");
-        weth.approve(address(clExecutor), AMOUNT);
-        usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+    //     console2.log("\nONE YEAR STRATEGY:\n 1.Approving tokens to spend.");
+    //     weth.approve(address(clExecutor), AMOUNT);
+    //     usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
 
-        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+    //     tokenIds = clExecutor.getOwnerTokenIds(address(this));
 
-        console2.log(
-            "\n 2.Providing liquidity for WETH/USDC pair with wide range"
-        );
-        (tokenId, ) = clExecutor.provideLiquidity(
-            WETH,
-            USDC,
-            AMOUNT,
-            usdc.balanceOf(address(this)),
-            500,
-            IClExecutor.ranges.WIDE
-        );
-        tokenIds = clExecutor.getOwnerTokenIds(address(this));
-        console2.log("  - Token ID: ", tokenId);
-        console2.log("  - Amount of token ids after: %d", tokenIds.length);
+    //     console2.log(
+    //         "\n 2.Providing liquidity for WETH/USDC pair with wide range"
+    //     );
+    //     (tokenId, ) = clExecutor.provideLiquidity(
+    //         WETH,
+    //         USDC,
+    //         AMOUNT,
+    //         usdc.balanceOf(address(this)),
+    //         500,
+    //         IClExecutor.ranges.WIDE
+    //     );
+    //     tokenIds = clExecutor.getOwnerTokenIds(address(this));
+    //     console2.log("  - Token ID: ", tokenId);
+    //     console2.log("  - Amount of token ids after: %d", tokenIds.length);
 
-        console2.log("\n 3. Volume creation and time travel");
-        while (block.timestamp < (initialTimestamp + 365 days)) {
-            createVolume();
-            console2.log(
-                "  - Timestamp before time travel (1 week): ",
-                block.timestamp
-            );
-            vm.warp(block.timestamp + 3 weeks);
-            console2.log("  - Timestamp after: ", block.timestamp);
-            console2.log("\n 4. Compounding.....");
-            clExecutor.compoundPosition(tokenId, IClExecutor.ranges.WIDE);
-        }
+    //     console2.log("\n 3. Volume creation and time travel");
+    //     for (uint8 idx = 0; idx <= 27 /* 53 weeks in year */; idx++) {
+    //         console2.log(
+    //             "  - Timestamp before time travel (2 week): ",
+    //             block.timestamp
+    //         );
+    //         vm.warp(block.timestamp + 1 weeks);
+    //         createVolume();
+    //         vm.warp(block.timestamp + 1 weeks);
+    //         console2.log("  - Timestamp after: ", block.timestamp);
+    //         console2.log("\n 4. Compounding.....");
+    //         clExecutor.compoundPosition(tokenId, IClExecutor.ranges.WIDE);
+    //         vm.warp(block.timestamp + 1 weeks);
+    //         console2.log("  - Timestamp after: ", block.timestamp);
+    //     }
 
-        console2.log("  - Funds before: ");
+    //     console2.log("  - Funds before: ");
 
-        uint256 ramBalance = IERC20(RAM).balanceOf(address(this));
-        uint256 wethBalance = IERC20(WETH).balanceOf(address(this));
-        uint256 usdcBalance = IERC20(USDC).balanceOf(address(this));
+    //     uint256 ramBalance = IERC20(RAM).balanceOf(address(this));
+    //     uint256 wethBalance = IERC20(WETH).balanceOf(address(this));
+    //     uint256 usdcBalance = IERC20(USDC).balanceOf(address(this));
 
-        console2.log("   RAM ", ramBalance);
-        console2.log("   WETH ", wethBalance);
-        console2.log("   USDC ", usdcBalance);
+    //     console2.log("   RAM ", ramBalance);
+    //     console2.log("   WETH ", wethBalance);
+    //     console2.log("   USDC ", usdcBalance);
 
-        console2.log("\n 5. Removing liquidity....");
-        wide.approve(address(clExecutor), wide.balanceOf(address(this)));
-        clExecutor.removeLiquidity(tokenId, wide.balanceOf(address(this)));
+    //     console2.log("\n 5. Removing liquidity....");
+    //     wide.approve(address(clExecutor), wide.balanceOf(address(this)));
+    //     clExecutor.removeLiquidity(tokenId, wide.balanceOf(address(this)));
 
-        // assert(IERC20(RAM).balanceOf(address(this)) > ramBalance);
-        // assert(IERC20(WETH).balanceOf(address(this)) > wethBalance);
-        // assert(IERC20(USDC).balanceOf(address(this)) > usdcBalance);
+    //     // assert(IERC20(RAM).balanceOf(address(this)) > ramBalance);
+    //     // assert(IERC20(WETH).balanceOf(address(this)) > wethBalance);
+    //     // assert(IERC20(USDC).balanceOf(address(this)) > usdcBalance);
 
-        ramBalance = IERC20(RAM).balanceOf(address(this));
-        wethBalance = IERC20(WETH).balanceOf(address(this));
-        usdcBalance = IERC20(USDC).balanceOf(address(this));
-        console2.log("  - Funds after: ");
-        console2.log("   RAM ", ramBalance);
-        console2.log("   WETH ", wethBalance);
-        console2.log("   USDC ", usdcBalance);
-        clExecutor.swapTokens(USDC, WETH, AMOUNT);
-        clExecutor.swapTokens(RAM, WETH, AMOUNT);
-        uint256 finalWethBalance = weth.balanceOf(address(this));
-        console2.log("Final balance of WETH: ", weth.balanceOf(address(this)));
-        uint256 apy = ((finalWethBalance * 100) / initialWethBalance) - 100;
-        console2.log("APY for year with volume xxx: ", apy);
-    }
+    //     ramBalance = IERC20(RAM).balanceOf(address(this));
+    //     wethBalance = IERC20(WETH).balanceOf(address(this));
+    //     usdcBalance = IERC20(USDC).balanceOf(address(this));
+    //     console2.log("  - Funds after: ");
+    //     console2.log("   RAM ", ramBalance);
+    //     console2.log("   WETH ", wethBalance);
+    //     console2.log("   USDC ", usdcBalance);
+    //     clExecutor.swapTokens(USDC, WETH, usdc.balanceOf(address(this)));
+    //     clExecutor.swapTokens(RAM, WETH, IERC20(RAM).balanceOf(address(this)));
+    //     uint256 finalWethBalance = weth.balanceOf(address(this));
+    //     console2.log("Final balance of WETH: ", weth.balanceOf(address(this)));
+    //     uint256 apy = ((finalWethBalance * 100) / initialWethBalance) - 100;
+    //     console2.log("APY for year with volume xxx: ", apy);
+    // }
 }

@@ -662,7 +662,7 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
         uint128 amount,
         bytes calldata data
     ) external returns (uint256 amount0, uint256 amount1) {
-        console2.log(">>>>>>>>>>> Recipient: ", recipient);
+        // console2.log(">>>>>>>>>>> Recipient: ", recipient);
         return
             mint(
                 recipient,
@@ -685,16 +685,16 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
         uint256 veRamTokenId,
         bytes calldata data
     ) public lock advancePeriod returns (uint256 amount0, uint256 amount1) {
-        console2.log(">>>>>>>>>>> Recipient: ", recipient);
-        console2.log(">>>>>>>>>>> Sender: ", msg.sender);
-        console2.log(amount);
+        // console2.log(">>>>>>>>>>> Recipient: ", recipient);
+        // console2.log(">>>>>>>>>>> Sender: ", msg.sender);
+        // console2.log(amount);
         require(amount > 0);
         if (veRamTokenId != type(uint256).max) {
             require(recipient == msg.sender);
         }
 
         TokenAmountInts memory amountInt;
-        console2.log(">>>>>>>>>1  Modyfing position... ");
+        // console2.log(">>>>>>>>>1  Modyfing position... ");
         (, amountInt.token0, amountInt.token1) = Position._modifyPosition(
             Position.ModifyPositionParams({
                 owner: recipient,
@@ -712,14 +712,14 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
         uint256 balance1Before;
         if (amount0 > 0) balance0Before = States.balance0();
         if (amount1 > 0) balance1Before = States.balance1();
-        console2.log("Balances: ", amount0, amount1);
-        console2.log(">>>>>>>>>2  After balance... >>address: ", msg.sender);
+        // console2.log("Balances: ", amount0, amount1);
+        // console2.log(">>>>>>>>>2  After balance... >>address: ", msg.sender);
         IRamsesV2MintCallback(msg.sender).ramsesV2MintCallback(
             amount0,
             amount1,
             data
         );
-        console2.log(">>>>>>>>>3  After callback... ");
+        // console2.log(">>>>>>>>>3  After callback... ");
         if (amount0 > 0)
             require(balance0Before.add(amount0) <= States.balance0(), "M0");
         if (amount1 > 0)
@@ -734,7 +734,7 @@ contract RamsesV2Pool is Initializable, IRamsesV2Pool {
             amount0,
             amount1
         );
-        console2.log(">>>>>>>>>4  End of func... ");
+        // console2.log(">>>>>>>>>4  End of func... ");
     }
 
     ///  IRamsesV2PoolActions
