@@ -63,6 +63,8 @@ contract ForkTest is Test {
         mainnetFork = vm.createFork(MAINNET_ALCHEMY_URL);
         arbitrumFork = vm.createFork(ARB_MAINNET_ALCHEMY_URL);
         vm.selectFork(arbitrumFork);
+        console2.log("arbitrumFork");
+        console2.log(arbitrumFork);
 
         console2.log("\n 2.Contracts deployment");
         narrow = new Narrow();

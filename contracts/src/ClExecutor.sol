@@ -91,6 +91,7 @@ contract ClExecutor is IClExecutor {
         } else if (ranges.MID == priceRange) {
             token = midToken;
         }
+        
         TransferHelper.safeTransferFrom(
             tokenA,
             msg.sender,
