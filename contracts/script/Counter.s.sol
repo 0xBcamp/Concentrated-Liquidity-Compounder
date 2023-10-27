@@ -2,7 +2,7 @@
 pragma solidity ^0.8.13;
 
 import "forge-std/Script.sol";
-
+import "forge-std/StdUtils.sol";
 import {ClExecutor} from "../src/ClExecutor.sol";
 import {RamsesV2Pool} from "../src/RamsesV2Pool.sol";
 import {GaugeV2} from "../src/GaugeV2.sol";
@@ -35,7 +35,7 @@ contract MyScript is Script {
 
     address custom_weth = 0x95bD8D42f30351685e96C62EDdc0d0613bf9a87A;
 
-    uint256 AMOUNT = 1e18;
+    uint256 AMOUNT = 10000;
 
     function run() external {
         uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
@@ -55,11 +55,12 @@ contract MyScript is Script {
         mid.setExecutor(address(clExecutor));
         wide.setExecutor(address(clExecutor));
 
-        console2.log("\n4. Getting wrapped ethereum");
-        clExecutor.getWethFromEth{value: 4 * AMOUNT}(WETH);
-        weth.approve(address(clExecutor), weth.balanceOf(address(this)));
-        console2.log("Swapping WETH to USDC");
-        clExecutor.swapTokens(WETH, USDC, AMOUNT);
+        //console2.log("\n4. Getting wrapped ethereum");
+        //clExecutor.getWethFromEth{value: 4 * AMOUNT}(WETH);
+        //weth.approve(address(clExecutor), weth.balanceOf(address(this)));
+        //console2.log("Swapping WETH to USDC");
+        //clExecutor.swapTokens(WETH, USDC, AMOUNT);
+
         console2.log("success!");
         vm.stopBroadcast();
     }
