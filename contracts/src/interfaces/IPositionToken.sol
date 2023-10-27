@@ -10,11 +10,13 @@ interface IPositionToken is IERC20 {
 
     function burn(uint256 amount) external;
 
-    function mint(uint256 amount) external;
+    function mint(uint256 amount) external returns (uint256);
 
     function rangePercentage() external view returns (uint8);
 
     function getTimestampOfFirstMint() external view returns (uint256);
 
     function getRelativeSupply() external view returns (uint256);
+
+    function symbol() external view returns (string memory);
 }

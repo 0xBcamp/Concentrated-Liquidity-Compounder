@@ -6,7 +6,7 @@ import {console2} from "forge-std/Test.sol";
 import "../lib/TransferHelper.sol";
 import "./interfaces/IClExecutor.sol";
 
-contract ClExecutor is IClExecutor {
+contract ClExecutor is IClExecutor, Ownable {
     /* Temporary */
     address constant NFT_MANAGER_ADDRESS =
         0xAA277CB7914b7e5514946Da92cb9De332Ce610EF;
@@ -14,7 +14,11 @@ contract ClExecutor is IClExecutor {
     address constant VOTING_ESCROW = 0xAAA343032aA79eE9a6897Dab03bef967c3289a06;
     address constant VOTER = 0xAAA2564DEb34763E3d05162ed3f5C2658691f499;
     address constant MINTER = 0xAAAA0b6BaefaeC478eB2d1337435623500AD4594;
+
+    address constant USDC = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831;
+    address constant WETH = 0x82aF49447D8a07e3bd95BD0d56f35241523fBab1;
     address constant RAM = 0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418;
+    address constant XRAM = 0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7;
 
     ISwapRouter immutable swapRouter;
     IPositionToken immutable narrowToken;
@@ -31,6 +35,7 @@ contract ClExecutor is IClExecutor {
 
     mapping(address => uint256[]) msgSenderToTokenIds;
     mapping(address => uint256) positionTokenToTokenId;
+    address compounderAddress;
 
     constructor(
         address routerAddress,
@@ -45,17 +50,24 @@ contract ClExecutor is IClExecutor {
     }
 
     // Implementing `onERC721Received` so this contract can receive custody of erc721 tokens
-    function onERC721Received(
-        address operator,
-        address,
-        uint _tokenId,
-        bytes calldata
-    ) external returns (bytes4) {
-        //_createDeposit(operator, _tokenId);
-        return this.onERC721Received.selector;
-    }
+    // function onERC721Received(
+    //     address operator,
+    //     address,
+    //     uint _tokenId,
+    //     bytes calldata
+    // ) external returns (bytes4) {
+    //     //_createDeposit(operator, _tokenId);
+    //     return this.onERC721Received.selector;
+    // }
 
     /** Public setters **/
+    // function changeTokenIds(
+    //     address from,
+    //     address to,
+    //     uint256 amount
+    // ) external onlyPositionTokens {
+    //     msgSenderToTokenIds[from]
+    // }
 
     /** Function to get WETH from ETH
      * @param wethAddress - address of WETH contract (0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2 for mainnet)
@@ -68,6 +80,12 @@ contract ClExecutor is IClExecutor {
         //wEth.approve(msg.sender, wEth.balanceOf(address(this)));
         wEth.transfer(msg.sender, wEth.balanceOf(address(this)));
         return wEth.balanceOf(msg.sender);
+    }
+
+    function setCompounderAddress(
+        address _compounderAddress
+    ) external onlyOwner {
+        compounderAddress = _compounderAddress;
     }
 
     /**
@@ -135,28 +153,70 @@ contract ClExecutor is IClExecutor {
     /**
     @dev Unstake and remove liquidity from ramses
     */
-    function removeLiquidity(uint256 tokenId) external {
+    function removeLiquidity(uint256 tokenId, uint256 positionAmount) external {
+        uint256 ramBalance = IERC20(RAM).balanceOf(address(this));
+        // uint256 xramBalance = IERC20(XRAM).balanceOf(address(this));
+        uint256 wethBalance = IERC20(WETH).balanceOf(address(this));
+        uint256 usdcBalance = IERC20(USDC).balanceOf(address(this));
+
         (
             ,
             ,
             address tokenA,
             address tokenB,
             uint24 fee,
-            int24 tickLower,
-            int24 tickUpper,
+            ,
+            ,
             uint128 liquidity,
             ,
             ,
             ,
 
         ) = nonfungiblePositionManager.positions(tokenId);
+        address tokenAddress = _findPositionTokenFromTokenId(tokenId);
+        if (tokenAddress == address(0)) {
+            revert PositionNotFound();
+        }
+        IPositionToken token = IPositionToken(tokenAddress);
+        token.transferFrom(msg.sender, address(this), positionAmount);
+        uint128 liquidityToRemove = uint128(
+            (positionAmount * liquidity) / token.totalSupply()
+        );
+        console2.log("Liquidity to remove: ", liquidityToRemove);
+
+        INonfungiblePositionManager.DecreaseLiquidityParams
+            memory params = INonfungiblePositionManager.DecreaseLiquidityParams(
+                tokenId,
+                liquidityToRemove,
+                0,
+                0,
+                block.timestamp + 10
+            );
 
         IRamsesV2Pool currentPool = IRamsesV2Pool(
             ramsesV2Factory.getPool(tokenA, tokenB, fee)
-        ); /* The fee shall be also adjusted */
+        );
+
         _collectRewards(tokenId, address(currentPool));
-        currentPool.burn(tickLower, tickUpper, liquidity);
-        nonfungiblePositionManager.burn(tokenId);
+        nonfungiblePositionManager.decreaseLiquidity(params);
+
+        /* transfer gathered tokens to msg.sender */
+        uint256 gatheredTokens = (IERC20(RAM).balanceOf(address(this)) -
+            ramBalance);
+        console2.log("Transfering RAM tokens: ", gatheredTokens);
+        IERC20(RAM).transfer(msg.sender, gatheredTokens);
+
+        // gatheredTokens = IERC20(XRAM).balanceOf(address(this)) - xramBalance;
+        // console2.log("Transfering XRAM tokens: ", gatheredTokens);
+        // IERC20(XRAM).transfer(msg.sender, gatheredTokens);
+
+        gatheredTokens = IERC20(WETH).balanceOf(address(this)) - wethBalance;
+        console2.log("Transfering WETH tokens: ", gatheredTokens);
+        IERC20(WETH).transfer(msg.sender, gatheredTokens);
+
+        gatheredTokens = IERC20(USDC).balanceOf(address(this)) - usdcBalance;
+        console2.log("Transfering USDC tokens: ", gatheredTokens);
+        IERC20(USDC).transfer(msg.sender, gatheredTokens);
     }
 
     function swapTokens(
@@ -230,11 +290,9 @@ contract ClExecutor is IClExecutor {
 
         (amount0, amount1, farmAmounts) = _collectRewards(tokenId, poolAddress);
 
-        uint256 balance0 = IERC20(0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418)
-            .balanceOf(address(this));
+        uint256 balance0 = IERC20(token0).balanceOf(address(this));
 
-        uint256 balance1 = IERC20(0xAAA1eE8DC1864AE49185C368e8c64Dd780a50Fb7)
-            .balanceOf(address(this));
+        uint256 balance1 = IERC20(token1).balanceOf(address(this));
         console2.log(balance0, balance1);
         console2.log(farmAmounts[0]);
         console2.log(farmAmounts[1]);
@@ -254,9 +312,7 @@ contract ClExecutor is IClExecutor {
         }
         veRamTokenId = _boostRewards(
             tokenId,
-            IERC20(0xAAA6C1E32C55A7Bfa8066A6FAE9b42650F262418).balanceOf(
-                address(this)
-            ),
+            IERC20(RAM).balanceOf(address(this)),
             poolAddress
         );
     }
@@ -321,6 +377,7 @@ contract ClExecutor is IClExecutor {
             );
         /* Logical blocks - limits stack usage */
         {
+            uint256 tokensMinted = 0;
             (
                 tokenId,
                 amountOfLiquidity,
@@ -331,8 +388,8 @@ contract ClExecutor is IClExecutor {
             ); /* state updated after interaction */
             msgSenderToTokenIds[msg.sender].push(tokenId);
             positionTokenToTokenId[address(token)] = tokenId;
-            token.mint(amountOfLiquidity);
-            token.transfer(msg.sender, amountOfLiquidity);
+            tokensMinted = token.mint(amountOfLiquidity);
+            token.transfer(msg.sender, tokensMinted);
             // console2.log("Amount0: %d", amount0);
             // console2.log("Amount1: %d", amount1);
             // console2.log("Token Id: %d", tokenId);
@@ -354,6 +411,7 @@ contract ClExecutor is IClExecutor {
         uint256 amount0 = 0;
         uint256 amount1 = 0;
         uint256 amountOfLiquidity = 0;
+        uint256 prevAmountOfLiquidity = 0;
         /* Logical blocks - limits stack usage */
         require(
             IERC20(tokenA).balanceOf(address(this)) > 0,
@@ -374,6 +432,10 @@ contract ClExecutor is IClExecutor {
             address(nonfungiblePositionManager),
             amountB
         );
+        console2.log("Balance is: ");
+        console2.log(IERC20(tokenA).balanceOf(address(this)));
+        console2.log(IERC20(tokenB).balanceOf(address(this)));
+        console2.log("Allowance is: ");
         console2.log(
             IERC20(tokenA).allowance(
                 address(this),
@@ -386,6 +448,7 @@ contract ClExecutor is IClExecutor {
                 address(nonfungiblePositionManager)
             )
         );
+
         INonfungiblePositionManager.IncreaseLiquidityParams
             memory params = INonfungiblePositionManager.IncreaseLiquidityParams(
                 tokenId,
@@ -398,11 +461,21 @@ contract ClExecutor is IClExecutor {
         console2.log("Increasing liquidity.... ");
         /* Logical blocks - limits stack usage */
         {
+            uint256 tokensMinted = 0;
+            prevAmountOfLiquidity = getLiquidityOfPosition(tokenId);
             (amountOfLiquidity, amount0, amount1) = nonfungiblePositionManager
                 .increaseLiquidity(
                     params
                 ); /* state updated after interaction */
-            console2.log("After increasing");
+            console2.log(
+                "After increasing...\n NewLiquidity: ",
+                amountOfLiquidity
+            );
+            console2.log(
+                "After increasing...\n OldLiquidity: ",
+                prevAmountOfLiquidity
+            );
+
             bool tokenAdded = false;
             for (
                 uint8 idx = 0;
@@ -417,13 +490,12 @@ contract ClExecutor is IClExecutor {
             if (false == tokenAdded) {
                 msgSenderToTokenIds[msg.sender].push(tokenId);
             }
-
-            token.mint(amountOfLiquidity);
-            token.transfer(msg.sender, amountOfLiquidity);
-            // console2.log("Amount0: %d", amount0);
-            // console2.log("Amount1: %d", amount1);
-            // console2.log("Token Id: %d", tokenId);
-            // console2.log("Amount of liquidity: %d", amountOfLiquidity);
+            if (msg.sender != compounderAddress) {
+                tokensMinted = token.mint((amountOfLiquidity));
+                console2.log("tokensMinted: ", tokensMinted);
+                console2.log("symbol of the token: ", token.symbol());
+                token.transfer(msg.sender, tokensMinted);
+            }
         }
 
         return (amountOfLiquidity);
@@ -451,7 +523,7 @@ contract ClExecutor is IClExecutor {
             console2.log(">>>>>>>>>>>>>>>>>> Creating lock.... ");
             veRamTokenId = votingEscrow.create_lock_for(
                 ramAmount,
-                126144000,
+                126144000 / 4,
                 address(this)
             ); // 126144000 - 4 years
 
@@ -598,9 +670,43 @@ contract ClExecutor is IClExecutor {
 
     function getLiquidityOfPosition(
         uint256 tokenId
-    ) external view returns (uint256 liquidity) {
+    ) public view returns (uint256 liquidity) {
         (, , , , , , , liquidity, , , , ) = nonfungiblePositionManager
             .positions(tokenId);
+    }
+
+    function _findPositionTokenFromTokenId(
+        uint256 tokenId
+    ) private view returns (address) {
+        address positionTokenAddress;
+        for (uint8 idx; idx < uint8(ranges.MAX); idx++) {
+            positionTokenAddress = _getPositionTokenByRange(ranges(idx));
+            if (positionTokenAddress != address(0)) {
+                if (positionTokenToTokenId[positionTokenAddress] == tokenId) {
+                    break;
+                } else {
+                    positionTokenAddress = address(0);
+                }
+            } else {
+                revert WrongRangesPassed(ranges(idx));
+            }
+        }
+        return positionTokenAddress;
+    }
+
+    function _getPositionTokenByRange(
+        ranges range
+    ) private view returns (address) {
+        if (ranges.NARROW == range) {
+            return address(narrowToken);
+        } else if (ranges.MID == range) {
+            return address(midToken);
+        } else if (ranges.WIDE == range) {
+            return address(wideToken);
+        } else {
+            /* error */
+            return address(0);
+        }
     }
 
     function _position(

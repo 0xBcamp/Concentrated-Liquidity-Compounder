@@ -284,13 +284,6 @@ contract ForkTest is Test {
         assertEq(mid.balanceOf(address(this)), 0);
         assert(narrow.balanceOf(address(this)) > 0);
 
-        // console2.log("Balances:");
-        // console2.log(IERC20(WETH).balanceOf(address(clExecutor)));
-        // console2.log(IERC20(USDC).balanceOf(address(clExecutor)));
-        /* Tokens gathered from last collect operation should be less than all amount of tokens gathered - not Applied because createVolume violate this for now */
-        // assert(amount0 < IERC20(WETH).balanceOf(address(clExecutor)));
-        // assert(amount1 < IERC20(USDC).balanceOf(address(clExecutor)));
-        /* Tokens gathered from last collect operation should be more than all amount gathered previously */
         assert(amount0 > prevAmount0);
         assert(amount1 > prevAmount1);
     }
@@ -531,7 +524,10 @@ contract ForkTest is Test {
             "  - xRAM tokens gathered: ",
             IERC20(XRAM).balanceOf(address(clExecutor))
         );
-
+        console2.log(
+            "  - Wide tokens before compounding: ",
+            wide.balanceOf(address(this))
+        );
         // clExecutor.swapTokens(WETH, USDC, AMOUNT);
         // console2.log("Weth transfers");
         // weth.transfer(nfm, (AMOUNT / 2));
@@ -574,4 +570,197 @@ contract ForkTest is Test {
         assert(amount0 > prevAmount0);
         assert(amount1 > prevAmount1);
     }
+
+    function testRemoveLiquidity() public {
+        uint256[] memory tokenIds;
+        uint256 tokenId;
+
+        console2.log("\nREMOVE LIQUIDITY:\n 1.Approving tokens to spend.");
+        weth.approve(address(clExecutor), AMOUNT);
+        usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+
+        console2.log(
+            "\n 2.Providing liquidity for WETH/USDC pair with wide range"
+        );
+        (tokenId, ) = clExecutor.provideLiquidity(
+            WETH,
+            USDC,
+            AMOUNT,
+            usdc.balanceOf(address(this)),
+            500,
+            IClExecutor.ranges.WIDE
+        );
+        tokenIds = clExecutor.getOwnerTokenIds(address(this));
+        console2.log("  - Token ID: ", tokenId);
+        console2.log("  - Amount of token ids after: %d", tokenIds.length);
+
+        console2.log("\n 3. Volume creation");
+        createVolume();
+        console2.log(
+            "  - Timestamp before time travel (2 weeks): ",
+            block.timestamp
+        );
+        vm.warp(block.timestamp + 2 weeks);
+
+        console2.log("  - Timestamp after: ", block.timestamp);
+        console2.log("  - Funds before: ");
+
+        uint256 ramBalance = IERC20(RAM).balanceOf(address(this));
+        uint256 wethBalance = IERC20(WETH).balanceOf(address(this));
+        uint256 usdcBalance = IERC20(USDC).balanceOf(address(this));
+
+        console2.log("   RAM ", ramBalance);
+        console2.log("   WETH ", wethBalance);
+        console2.log("   USDC ", usdcBalance);
+
+        console2.log("\n 4. Removing liquidity....");
+        wide.approve(address(clExecutor), wide.balanceOf(address(this)));
+        clExecutor.removeLiquidity(tokenId, wide.balanceOf(address(this)));
+        console2.log("  - Funds after: ");
+
+        assert(IERC20(RAM).balanceOf(address(this)) > ramBalance);
+        assert(IERC20(WETH).balanceOf(address(this)) > wethBalance);
+        assert(IERC20(USDC).balanceOf(address(this)) > usdcBalance);
+
+        ramBalance = IERC20(RAM).balanceOf(address(this));
+        wethBalance = IERC20(WETH).balanceOf(address(this));
+        usdcBalance = IERC20(USDC).balanceOf(address(this));
+
+        console2.log("   RAM ", ramBalance);
+        console2.log("   WETH ", wethBalance);
+        console2.log("   USDC ", usdcBalance);
+    }
+
+    function testMintingFunctionality() public {
+        uint256[] memory tokenIds;
+        uint256 tokenId;
+        uint256 prevNarrowBalance = narrow.balanceOf(address(this));
+
+        console2.log("\nMINTING FUNCTIONALITY:\n 1.Approving tokens to spend.");
+
+        for (uint8 idx; idx < 10; idx++) {
+            console2.log("\n 3. Approving and swapping...");
+            weth.approve(address(clExecutor), AMOUNT / 10);
+            clExecutor.swapTokens(WETH, USDC, AMOUNT / 10);
+            weth.approve(address(clExecutor), AMOUNT / 10);
+            usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+
+            tokenIds = clExecutor.getOwnerTokenIds(address(this));
+
+            console2.log(
+                "\n 2.Providing liquidity for WETH/USDC pair with wide range"
+            );
+            (tokenId, ) = clExecutor.provideLiquidity(
+                WETH,
+                USDC,
+                AMOUNT / 10,
+                usdc.balanceOf(address(this)),
+                500,
+                IClExecutor.ranges.MID
+            );
+            tokenIds = clExecutor.getOwnerTokenIds(address(this));
+            console2.log("  - Token ID: ", tokenId);
+            console2.log("  - Amount of token ids after: %d", tokenIds.length);
+
+            console2.log("\n 3. Amount of narrow tokens minted: ");
+            console2.log(
+                "   ",
+                mid.balanceOf(address(this)) - prevNarrowBalance
+            );
+
+            /* Main assertion - tokens just minted have to be less
+            than the tokens minted week before */
+            assert(
+                (mid.balanceOf(address(this)) - prevNarrowBalance) <
+                    prevNarrowBalance
+            );
+
+            prevNarrowBalance = mid.balanceOf(address(this));
+
+            createVolume();
+            console2.log(
+                "  - Timestamp before time travel (2 weeks): ",
+                block.timestamp
+            );
+            vm.warp(block.timestamp + 2 weeks);
+            console2.log("  - Timestamp after: ", block.timestamp);
+        }
+    }
+
+    // function testOneYearStrategy() public {
+    //     uint256[] memory tokenIds;
+    //     uint256 tokenId;
+    //     uint256 initialWethBalance = weth.balanceOf(address(this));
+
+    //     console2.log("\nONE YEAR STRATEGY:\n 1.Approving tokens to spend.");
+    //     weth.approve(address(clExecutor), AMOUNT);
+    //     usdc.approve(address(clExecutor), usdc.balanceOf(address(this)));
+
+    //     tokenIds = clExecutor.getOwnerTokenIds(address(this));
+
+    //     console2.log(
+    //         "\n 2.Providing liquidity for WETH/USDC pair with wide range"
+    //     );
+    //     (tokenId, ) = clExecutor.provideLiquidity(
+    //         WETH,
+    //         USDC,
+    //         AMOUNT,
+    //         usdc.balanceOf(address(this)),
+    //         500,
+    //         IClExecutor.ranges.WIDE
+    //     );
+    //     tokenIds = clExecutor.getOwnerTokenIds(address(this));
+    //     console2.log("  - Token ID: ", tokenId);
+    //     console2.log("  - Amount of token ids after: %d", tokenIds.length);
+
+    //     console2.log("\n 3. Volume creation and time travel");
+    //     for (uint8 idx = 0; idx <= 27 /* 53 weeks in year */; idx++) {
+    //         console2.log(
+    //             "  - Timestamp before time travel (2 week): ",
+    //             block.timestamp
+    //         );
+    //         vm.warp(block.timestamp + 1 weeks);
+    //         createVolume();
+    //         vm.warp(block.timestamp + 1 weeks);
+    //         console2.log("  - Timestamp after: ", block.timestamp);
+    //         console2.log("\n 4. Compounding.....");
+    //         clExecutor.compoundPosition(tokenId, IClExecutor.ranges.WIDE);
+    //         vm.warp(block.timestamp + 1 weeks);
+    //         console2.log("  - Timestamp after: ", block.timestamp);
+    //     }
+
+    //     console2.log("  - Funds before: ");
+
+    //     uint256 ramBalance = IERC20(RAM).balanceOf(address(this));
+    //     uint256 wethBalance = IERC20(WETH).balanceOf(address(this));
+    //     uint256 usdcBalance = IERC20(USDC).balanceOf(address(this));
+
+    //     console2.log("   RAM ", ramBalance);
+    //     console2.log("   WETH ", wethBalance);
+    //     console2.log("   USDC ", usdcBalance);
+
+    //     console2.log("\n 5. Removing liquidity....");
+    //     wide.approve(address(clExecutor), wide.balanceOf(address(this)));
+    //     clExecutor.removeLiquidity(tokenId, wide.balanceOf(address(this)));
+
+    //     // assert(IERC20(RAM).balanceOf(address(this)) > ramBalance);
+    //     // assert(IERC20(WETH).balanceOf(address(this)) > wethBalance);
+    //     // assert(IERC20(USDC).balanceOf(address(this)) > usdcBalance);
+
+    //     ramBalance = IERC20(RAM).balanceOf(address(this));
+    //     wethBalance = IERC20(WETH).balanceOf(address(this));
+    //     usdcBalance = IERC20(USDC).balanceOf(address(this));
+    //     console2.log("  - Funds after: ");
+    //     console2.log("   RAM ", ramBalance);
+    //     console2.log("   WETH ", wethBalance);
+    //     console2.log("   USDC ", usdcBalance);
+    //     clExecutor.swapTokens(USDC, WETH, usdc.balanceOf(address(this)));
+    //     clExecutor.swapTokens(RAM, WETH, IERC20(RAM).balanceOf(address(this)));
+    //     uint256 finalWethBalance = weth.balanceOf(address(this));
+    //     console2.log("Final balance of WETH: ", weth.balanceOf(address(this)));
+    //     uint256 apy = ((finalWethBalance * 100) / initialWethBalance) - 100;
+    //     console2.log("APY for year with volume xxx: ", apy);
+    // }
 }
