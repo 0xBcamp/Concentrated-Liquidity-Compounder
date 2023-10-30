@@ -293,9 +293,9 @@ contract ClExecutor is IClExecutor, Ownable {
         uint256 balance0 = IERC20(token0).balanceOf(address(this));
 
         uint256 balance1 = IERC20(token1).balanceOf(address(this));
-        console2.log(balance0, balance1);
-        console2.log(farmAmounts[0]);
-        console2.log(farmAmounts[1]);
+        // console2.log(balance0, balance1);
+        // console2.log(farmAmounts[0]);
+        // console2.log(farmAmounts[1]);
         console2.log(">>>>>>>>>>>>>>>>>> Boosting rewards.... ");
 
         if (balance1 > 0 || balance0 > 0) {
@@ -432,22 +432,22 @@ contract ClExecutor is IClExecutor, Ownable {
             address(nonfungiblePositionManager),
             amountB
         );
-        console2.log("Balance is: ");
-        console2.log(IERC20(tokenA).balanceOf(address(this)));
-        console2.log(IERC20(tokenB).balanceOf(address(this)));
-        console2.log("Allowance is: ");
-        console2.log(
-            IERC20(tokenA).allowance(
-                address(this),
-                address(nonfungiblePositionManager)
-            )
-        );
-        console2.log(
-            IERC20(tokenB).allowance(
-                address(this),
-                address(nonfungiblePositionManager)
-            )
-        );
+        // console2.log("Balance is: ");
+        // console2.log(IERC20(tokenA).balanceOf(address(this)));
+        // console2.log(IERC20(tokenB).balanceOf(address(this)));
+        // console2.log("Allowance is: ");
+        // console2.log(
+        //     IERC20(tokenA).allowance(
+        //         address(this),
+        //         address(nonfungiblePositionManager)
+        //     )
+        // );
+        // console2.log(
+        //     IERC20(tokenB).allowance(
+        //         address(this),
+        //         address(nonfungiblePositionManager)
+        //     )
+        // );
 
         INonfungiblePositionManager.IncreaseLiquidityParams
             memory params = INonfungiblePositionManager.IncreaseLiquidityParams(
@@ -467,14 +467,14 @@ contract ClExecutor is IClExecutor, Ownable {
                 .increaseLiquidity(
                     params
                 ); /* state updated after interaction */
-            console2.log(
-                "After increasing...\n NewLiquidity: ",
-                amountOfLiquidity
-            );
-            console2.log(
-                "After increasing...\n OldLiquidity: ",
-                prevAmountOfLiquidity
-            );
+            // console2.log(
+            //     "After increasing...\n NewLiquidity: ",
+            //     amountOfLiquidity
+            // );
+            // console2.log(
+            //     "After increasing...\n OldLiquidity: ",
+            //     prevAmountOfLiquidity
+            // );
 
             bool tokenAdded = false;
             for (
@@ -494,6 +494,7 @@ contract ClExecutor is IClExecutor, Ownable {
                 tokensMinted = token.mint((amountOfLiquidity));
                 console2.log("tokensMinted: ", tokensMinted);
                 console2.log("symbol of the token: ", token.symbol());
+                console2.log("Balance: ", token.balanceOf(address(this)));
                 token.transfer(msg.sender, tokensMinted);
             }
         }
